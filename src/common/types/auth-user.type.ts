@@ -1,3 +1,14 @@
+export interface JwtPayload {
+  sub: string;
+  institutionId: string;
+  roleId: string;
+  departmentId: string | null;
+  email: string;
+  firstName: string;
+  lastName: string;
+  mustChangePassword: boolean;
+}
+
 export interface AuthenticatedUser {
   id: string;
   institutionId: string;
@@ -7,11 +18,4 @@ export interface AuthenticatedUser {
   firstName: string;
   lastName: string;
   mustChangePassword: boolean;
-  sessionId: string;
-}
-
-export interface SessionPayload {
-  sessionId: string;
-  userId: string;
-  institutionId: string;
 }

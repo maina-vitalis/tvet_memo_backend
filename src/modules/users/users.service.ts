@@ -24,7 +24,9 @@ export class UsersService {
     const rows = await this.db
       .select()
       .from(users)
-      .where(and(eq(users.institutionId, institutionId), eq(users.isActive, true)));
+      .where(
+        and(eq(users.institutionId, institutionId), eq(users.isActive, true)),
+      );
 
     return rows.map((user) => sanitizeUser(user));
   }
@@ -55,14 +57,20 @@ export class UsersService {
     const [existing] = await this.db
       .select({ id: users.id })
       .from(users)
-      .where(and(eq(users.institutionId, institutionId), eq(users.email, email)))
+      .where(
+        and(eq(users.institutionId, institutionId), eq(users.email, email)),
+      )
       .limit(1);
 
     if (existing) {
-      throw new ConflictException('Email already registered in this institution');
+      throw new ConflictException(
+        'Email already registered in this institution',
+      );
     }
 
-    const passwordHash = await argon2.hash(dto.password, { type: argon2.argon2id });
+    const passwordHash = await argon2.hash(dto.password, {
+      type: argon2.argon2id,
+    });
 
     const [user] = await this.db
       .insert(users)
@@ -85,7 +93,7 @@ export class UsersService {
       action: 'user.create',
       entityType: 'user',
       entityId: user.id,
-      afterState: sanitizeUser(user) as Record<string, unknown>,
+      afterState: sanitizeUser(user),
     });
 
     return sanitizeUser(user);
@@ -123,7 +131,10 @@ export class UsersService {
       });
     }
 
-    if (dto.departmentId !== undefined && dto.departmentId !== before.departmentId) {
+    if (
+      dto.departmentId !== undefined &&
+      dto.departmentId !== before.departmentId
+    ) {
       await this.auditService.log({
         institutionId,
         actorId,

@@ -30,8 +30,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const message =
       typeof exceptionResponse === 'string'
         ? exceptionResponse
-        : (exceptionResponse as { message?: string | string[] }).message ??
-          'Unexpected error';
+        : ((exceptionResponse as { message?: string | string[] }).message ??
+          'Unexpected error');
 
     if (status >= 500) {
       this.logger.error(

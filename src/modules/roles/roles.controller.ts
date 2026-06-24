@@ -1,4 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
@@ -19,10 +27,7 @@ export class RolesController {
   }
 
   @Post()
-  create(
-    @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: CreateRoleDto,
-  ) {
+  create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateRoleDto) {
     return this.rolesService.create(user.institutionId, user.id, dto);
   }
 

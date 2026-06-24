@@ -4,10 +4,9 @@ export default () => ({
   database: {
     url: process.env.DATABASE_URL,
   },
-  session: {
-    secret: process.env.SESSION_SECRET,
-    cookieName: process.env.SESSION_COOKIE_NAME ?? 'tvet_session',
-    maxAgeMs: parseInt(process.env.SESSION_MAX_AGE_MS ?? '604800000', 10),
+  jwt: {
+    secret: process.env.JWT_SECRET,
+    expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   },
   cors: {
     origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',

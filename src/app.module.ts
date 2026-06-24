@@ -4,7 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
-import { SessionAuthGuard } from './common/guards/session-auth.guard';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
@@ -36,7 +36,7 @@ import { UsersModule } from './modules/users/users.module';
   providers: [
     {
       provide: APP_GUARD,
-      useClass: SessionAuthGuard,
+      useClass: JwtAuthGuard,
     },
     {
       provide: APP_FILTER,

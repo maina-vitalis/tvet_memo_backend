@@ -26,16 +26,11 @@ class EnvironmentVariables {
 
   @IsString()
   @IsNotEmpty()
-  SESSION_SECRET!: string;
+  JWT_SECRET!: string;
 
   @IsString()
   @IsOptional()
-  SESSION_COOKIE_NAME?: string;
-
-  @IsInt()
-  @Min(60000)
-  @IsOptional()
-  SESSION_MAX_AGE_MS?: number;
+  JWT_EXPIRES_IN?: string;
 
   @IsUrl({ require_tld: false })
   @IsOptional()

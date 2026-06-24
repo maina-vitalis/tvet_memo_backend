@@ -28,7 +28,9 @@ export const roles = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [unique('role_institution_name_unique').on(table.institutionId, table.name)],
+  (table) => [
+    unique('role_institution_name_unique').on(table.institutionId, table.name),
+  ],
 );
 
 export type Role = typeof roles.$inferSelect;

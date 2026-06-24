@@ -9,11 +9,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import {
-  memoRecipients,
-  memos,
-  users,
-} from '../../database/schema';
+import { memoRecipients, memos, users } from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
 import {
   AcknowledgeMemoDto,
@@ -107,7 +103,9 @@ export class MemosService {
     }
 
     if (!['draft', 'scheduled'].includes(memo.status)) {
-      throw new BadRequestException('Only draft or scheduled memos can be edited');
+      throw new BadRequestException(
+        'Only draft or scheduled memos can be edited',
+      );
     }
 
     const [updated] = await this.db
@@ -120,7 +118,9 @@ export class MemosService {
         targetType: dto.targetType,
         targetPayload: dto.targetPayload,
         requiresAck: dto.requiresAck,
-        ackDeadlineAt: dto.ackDeadlineAt ? new Date(dto.ackDeadlineAt) : undefined,
+        ackDeadlineAt: dto.ackDeadlineAt
+          ? new Date(dto.ackDeadlineAt)
+          : undefined,
         scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
         status: dto.scheduledAt ? 'scheduled' : memo.status,
@@ -150,7 +150,9 @@ export class MemosService {
     const recipientIds = await this.resolveRecipients(institutionId, memo);
 
     if (recipientIds.length === 0) {
-      throw new BadRequestException('No recipients matched the target criteria');
+      throw new BadRequestException(
+        'No recipients matched the target criteria',
+      );
     }
 
     await this.db.insert(memoRecipients).values(
@@ -190,7 +192,10 @@ export class MemosService {
       .select()
       .from(memoRecipients)
       .where(
-        and(eq(memoRecipients.memoId, memoId), eq(memoRecipients.userId, userId)),
+        and(
+          eq(memoRecipients.memoId, memoId),
+          eq(memoRecipients.userId, userId),
+        ),
       )
       .limit(1);
 
@@ -220,14 +225,19 @@ export class MemosService {
     const memo = await this.findOne(institutionId, memoId);
 
     if (!memo.requiresAck) {
-      throw new BadRequestException('This memo does not require acknowledgement');
+      throw new BadRequestException(
+        'This memo does not require acknowledgement',
+      );
     }
 
     const [recipient] = await this.db
       .select()
       .from(memoRecipients)
       .where(
-        and(eq(memoRecipients.memoId, memoId), eq(memoRecipients.userId, userId)),
+        and(
+          eq(memoRecipients.memoId, memoId),
+          eq(memoRecipients.userId, userId),
+        ),
       )
       .limit(1);
 
@@ -240,7 +250,9 @@ export class MemosService {
     }
 
     if (dto.ackType === 'reply' && !dto.ackReply?.trim()) {
-      throw new BadRequestException('Reply is required for this acknowledgement type');
+      throw new BadRequestException(
+        'Reply is required for this acknowledgement type',
+      );
     }
 
     const [updated] = await this.db
@@ -280,7 +292,9 @@ export class MemosService {
       case MemoTargetTypeDto.DEPARTMENT: {
         const departmentIds = (payload.department_ids as string[]) ?? [];
         if (!departmentIds.length) {
-          throw new BadRequestException('department_ids required in target_payload');
+          throw new BadRequestException(
+            'department_ids required in target_payload',
+          );
         }
         const rows = await this.db
           .select({ id: users.id })

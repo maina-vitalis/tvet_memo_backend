@@ -1,14 +1,5 @@
-import {
-  pgTable,
-  smallint,
-  text,
-  timestamp,
-  uuid,
-} from 'drizzle-orm/pg-core';
-import {
-  notificationChannelEnum,
-  notificationStatusEnum,
-} from './enums';
+import { pgTable, smallint, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { notificationChannelEnum, notificationStatusEnum } from './enums';
 import { institutions } from './institutions';
 import { memos } from './memos';
 import { users } from './users';

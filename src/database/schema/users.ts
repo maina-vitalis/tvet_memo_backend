@@ -31,7 +31,9 @@ export const users = pgTable(
     totpSecret: text('totp_secret'),
     totpEnabled: boolean('totp_enabled').notNull().default(false),
     fcmToken: text('fcm_token'),
-    preferredLang: char('preferred_lang', { length: 2 }).notNull().default('en'),
+    preferredLang: char('preferred_lang', { length: 2 })
+      .notNull()
+      .default('en'),
     avatarUrl: text('avatar_url'),
     isActive: boolean('is_active').notNull().default(true),
     mustChangePassword: boolean('must_change_password').notNull().default(true),
@@ -45,7 +47,10 @@ export const users = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique('user_institution_email_unique').on(table.institutionId, table.email),
+    unique('user_institution_email_unique').on(
+      table.institutionId,
+      table.email,
+    ),
     unique('user_institution_staff_number_unique').on(
       table.institutionId,
       table.staffNumber,

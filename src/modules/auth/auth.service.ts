@@ -4,6 +4,8 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { and, eq } from 'drizzle-orm';
 import { Request } from 'express';
@@ -11,15 +13,19 @@ import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { institutions, users } from '../../database/schema';
 import { sanitizeUser } from '../../common/utils/crypto.util';
+import {
+  AuthenticatedUser,
+  JwtPayload,
+} from '../../common/types/auth-user.type';
 import { AuditService } from '../audit/audit.service';
 import { LoginDto } from './dto/login.dto';
-import { SessionService } from './session.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
-    private readonly sessionService: SessionService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
     private readonly auditService: AuditService,
   ) {}
 
@@ -60,26 +66,39 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const { sessionId } = await this.sessionService.create({
-      userId: user.id,
-      deviceName: dto.deviceName,
-      deviceType: dto.deviceType ?? 'web',
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-    });
-
     await this.db
       .update(users)
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, user.id));
 
-    req.session.auth = {
-      sessionId,
-      userId: user.id,
+    const payload: JwtPayload = {
+      sub: user.id,
       institutionId: institution.id,
+      roleId: user.roleId,
+      departmentId: user.departmentId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      mustChangePassword: user.mustChangePassword,
     };
 
+    const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
+    const accessToken = await this.jwtService.signAsync(payload);
+
+    await this.auditService.log({
+      institutionId: institution.id,
+      actorId: user.id,
+      action: 'auth.login',
+      entityType: 'user',
+      entityId: user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
     return {
+      accessToken,
+      tokenType: 'Bearer' as const,
+      expiresIn,
       user: sanitizeUser(user),
       institution: {
         id: institution.id,
@@ -90,23 +109,15 @@ export class AuthService {
     };
   }
 
-  async logout(req: Request) {
-    const sessionId = req.session?.auth?.sessionId;
-    if (sessionId) {
-      await this.sessionService.revoke(sessionId);
-      await this.auditService.log({
-        institutionId: req.session.auth!.institutionId,
-        actorId: req.session.auth!.userId,
-        action: 'session.revoke',
-        entityType: 'session',
-        entityId: sessionId,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent') ?? undefined,
-      });
-    }
-
-    await new Promise<void>((resolve, reject) => {
-      req.session.destroy((err) => (err ? reject(err) : resolve()));
+  async logout(user: AuthenticatedUser, req: Request) {
+    await this.auditService.log({
+      institutionId: user.institutionId,
+      actorId: user.id,
+      action: 'auth.logout',
+      entityType: 'user',
+      entityId: user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
     });
 
     return { message: 'Logged out successfully' };
@@ -154,7 +165,9 @@ export class AuthService {
       throw new BadRequestException('Current password is incorrect');
     }
 
-    const passwordHash = await argon2.hash(newPassword, { type: argon2.argon2id });
+    const passwordHash = await argon2.hash(newPassword, {
+      type: argon2.argon2id,
+    });
 
     await this.db
       .update(users)

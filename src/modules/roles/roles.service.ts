@@ -17,7 +17,9 @@ export class RolesService {
     return this.db
       .select()
       .from(roles)
-      .where(and(eq(roles.institutionId, institutionId), eq(roles.isActive, true)));
+      .where(
+        and(eq(roles.institutionId, institutionId), eq(roles.isActive, true)),
+      );
   }
 
   async findOne(institutionId: string, id: string) {
@@ -59,7 +61,7 @@ export class RolesService {
       action: 'role.create',
       entityType: 'role',
       entityId: role.id,
-      afterState: role as unknown as Record<string, unknown>,
+      afterState: role,
     });
 
     return role;
@@ -91,8 +93,8 @@ export class RolesService {
       action: 'role.update',
       entityType: 'role',
       entityId: id,
-      beforeState: before as unknown as Record<string, unknown>,
-      afterState: updated as unknown as Record<string, unknown>,
+      beforeState: before,
+      afterState: updated,
     });
 
     return updated;

@@ -1,17 +1,9 @@
 import { AuthenticatedUser } from './auth-user.type';
 
-declare module 'express-session' {
-  interface SessionData {
-    auth?: {
-      sessionId: string;
-      userId: string;
-      institutionId: string;
-    };
-  }
-}
-
 declare global {
   namespace Express {
+    // Augments Passport's default User type for JWT-authenticated requests.
+    // eslint-disable-next-line @typescript-eslint/no-empty-object-type
     interface User extends AuthenticatedUser {}
   }
 }
