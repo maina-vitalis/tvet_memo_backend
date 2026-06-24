@@ -1,5 +1,6 @@
 export interface JwtPayload {
   sub: string;
+  jti: string;
   institutionId: string;
   roleId: string;
   departmentId: string | null;
@@ -11,6 +12,7 @@ export interface JwtPayload {
 
 export interface AuthenticatedUser {
   id: string;
+  sessionId: string;
   institutionId: string;
   roleId: string;
   departmentId: string | null;

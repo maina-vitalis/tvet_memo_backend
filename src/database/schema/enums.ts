@@ -43,3 +43,9 @@ export const notificationStatusEnum = pgEnum('notification_status', [
   'failed',
   'retrying',
 ]);
+
+export const institutionPlanEnum = pgEnum('institution_plan', [
+  'trial',
+  'basic',
+  'pro',
+]);

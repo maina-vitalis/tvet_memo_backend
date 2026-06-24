@@ -12,13 +12,14 @@ import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { institutions, users } from '../../database/schema';
-import { sanitizeUser } from '../../common/utils/crypto.util';
+import { sanitizeUser, generateSessionId } from '../../common/utils/crypto.util';
 import {
   AuthenticatedUser,
   JwtPayload,
 } from '../../common/types/auth-user.type';
 import { AuditService } from '../audit/audit.service';
 import { LoginDto } from './dto/login.dto';
+import { SessionService } from './session.service';
 
 @Injectable()
 export class AuthService {
@@ -27,6 +28,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
+    private readonly sessionService: SessionService,
   ) {}
 
   async login(dto: LoginDto, req: Request) {
@@ -71,8 +73,12 @@ export class AuthService {
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, user.id));
 
+    const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
+    const sessionId = generateSessionId();
+
     const payload: JwtPayload = {
       sub: user.id,
+      jti: sessionId,
       institutionId: institution.id,
       roleId: user.roleId,
       departmentId: user.departmentId,
@@ -82,8 +88,17 @@ export class AuthService {
       mustChangePassword: user.mustChangePassword,
     };
 
-    const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
     const accessToken = await this.jwtService.signAsync(payload);
+
+    await this.sessionService.create({
+      sessionId,
+      userId: user.id,
+      token: accessToken,
+      deviceName: dto.deviceName,
+      deviceType: dto.deviceType ?? 'web',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
 
     await this.auditService.log({
       institutionId: institution.id,
@@ -110,12 +125,14 @@ export class AuthService {
   }
 
   async logout(user: AuthenticatedUser, req: Request) {
+    await this.sessionService.revoke(user.sessionId);
+
     await this.auditService.log({
       institutionId: user.institutionId,
       actorId: user.id,
-      action: 'auth.logout',
-      entityType: 'user',
-      entityId: user.id,
+      action: 'session.revoke',
+      entityType: 'session',
+      entityId: user.sessionId,
       ipAddress: req.ip,
       userAgent: req.get('user-agent') ?? undefined,
     });
