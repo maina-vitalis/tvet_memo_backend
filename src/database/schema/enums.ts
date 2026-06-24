@@ -1,0 +1,45 @@
+import { pgEnum } from 'drizzle-orm/pg-core';
+
+export const memoPriorityEnum = pgEnum('memo_priority', [
+  'low',
+  'normal',
+  'high',
+  'urgent',
+]);
+
+export const memoCategoryEnum = pgEnum('memo_category', [
+  'general',
+  'academic',
+  'administrative',
+  'emergency',
+  'event',
+]);
+
+export const memoStatusEnum = pgEnum('memo_status', [
+  'draft',
+  'scheduled',
+  'sent',
+  'archived',
+  'cancelled',
+]);
+
+export const memoTargetTypeEnum = pgEnum('memo_target_type', [
+  'broadcast',
+  'department',
+  'role',
+  'individual',
+]);
+
+export const ackTypeEnum = pgEnum('ack_type_enum', ['simple', 'reply']);
+
+export const notificationChannelEnum = pgEnum('notification_channel', [
+  'fcm',
+  'smtp',
+]);
+
+export const notificationStatusEnum = pgEnum('notification_status', [
+  'pending',
+  'sent',
+  'failed',
+  'retrying',
+]);

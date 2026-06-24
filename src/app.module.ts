@@ -1,10 +1,51 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigModule } from '@nestjs/config';
+import configuration from './config/configuration';
+import { validate } from './config/env.validation';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { SessionAuthGuard } from './common/guards/session-auth.guard';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { DatabaseModule } from './database/database.module';
+import { HealthController } from './health/health.controller';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { DepartmentsModule } from './modules/departments/departments.module';
+import { InstitutionsModule } from './modules/institutions/institutions.module';
+import { MemosModule } from './modules/memos/memos.module';
+import { RolesModule } from './modules/roles/roles.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [configuration],
+      validate,
+    }),
+    DatabaseModule,
+    AuditModule,
+    AuthModule,
+    InstitutionsModule,
+    RolesModule,
+    DepartmentsModule,
+    UsersModule,
+    MemosModule,
+  ],
+  controllers: [HealthController],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: SessionAuthGuard,
+    },
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: TransformInterceptor,
+    },
+  ],
 })
 export class AppModule {}
