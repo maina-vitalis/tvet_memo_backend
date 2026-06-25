@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { PlatformJwtPayload } from '../../common/types/platform-admin.type';
+import { PlatformJwtPayload } from '../../../../common/types/platform-admin.type';
 import { PlatformLoginDto } from './dto/platform-login.dto';
 
 @Injectable()

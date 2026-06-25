@@ -5,7 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import {
   PlatformAdmin,
   PlatformJwtPayload,
-} from '../../common/types/platform-admin.type';
+} from '../../../../common/types/platform-admin.type';
 
 @Injectable()
 export class PlatformJwtStrategy extends PassportStrategy(

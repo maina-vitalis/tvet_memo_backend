@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
-import { AuthModule } from '../auth/auth.module';
-import { InstitutionsModule } from '../institutions/institutions.module';
+import { AuthModule } from '../../auth/auth.module';
+import { InstitutionsModule } from '../institutions.module';
 import { PlatformAuthController } from './platform-auth.controller';
 import { PlatformAuthService } from './platform-auth.service';
 import { PlatformInstitutionsController } from './platform-institutions.controller';

@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { Public } from '../../common/decorators/public.decorator';
-import { PlatformAdminGuard } from '../../common/guards/platform-admin.guard';
-import { InstitutionsService } from '../institutions/institutions.service';
-import { ProvisionInstitutionDto } from '../institutions/dto/provision-institution.dto';
+import { Public } from '../../../../common/decorators/public.decorator';
+import { PlatformAdminGuard } from '../../../../common/guards/platform-admin.guard';
+import { InstitutionsService } from '../institutions.service';
+import { ProvisionInstitutionDto } from '../dto/provision-institution.dto';
 
 @Public()
 @UseGuards(PlatformAdminGuard)

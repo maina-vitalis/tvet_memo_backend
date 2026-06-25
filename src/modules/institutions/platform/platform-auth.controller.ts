@@ -1,5 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import { Public } from '../../common/decorators/public.decorator';
+import { Public } from '../../../../common/decorators/public.decorator';
 import { PlatformLoginDto } from './dto/platform-login.dto';
 import { PlatformAuthService } from './platform-auth.service';
 
