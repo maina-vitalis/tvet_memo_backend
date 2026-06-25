@@ -1,4 +1,5 @@
 CREATE TYPE "public"."ack_type_enum" AS ENUM('simple', 'reply');--> statement-breakpoint
+CREATE TYPE "public"."institution_plan" AS ENUM('trial', 'basic', 'pro');--> statement-breakpoint
 CREATE TYPE "public"."memo_category" AS ENUM('general', 'academic', 'administrative', 'emergency', 'event');--> statement-breakpoint
 CREATE TYPE "public"."memo_priority" AS ENUM('low', 'normal', 'high', 'urgent');--> statement-breakpoint
 CREATE TYPE "public"."memo_status" AS ENUM('draft', 'scheduled', 'sent', 'archived', 'cancelled');--> statement-breakpoint
@@ -9,6 +10,7 @@ CREATE TABLE "institution" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"subdomain" varchar(100) NOT NULL,
+	"plan" "institution_plan" DEFAULT 'trial' NOT NULL,
 	"logo_url" text,
 	"contact_email" varchar(255) NOT NULL,
 	"country_code" char(2) DEFAULT 'KE' NOT NULL,

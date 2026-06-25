@@ -1,5 +1,5 @@
 {
-  "id": "6d3549da-00fd-4ec9-9536-4d808a64ef91",
+  "id": "b767dc21-c2f5-4f19-9f53-aa4af83b1aad",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -26,6 +26,14 @@
           "type": "varchar(100)",
           "primaryKey": false,
           "notNull": true
+        },
+        "plan": {
+          "name": "plan",
+          "type": "institution_plan",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'trial'"
         },
         "logo_url": {
           "name": "logo_url",
@@ -1293,6 +1301,15 @@
       "values": [
         "simple",
         "reply"
+      ]
+    },
+    "public.institution_plan": {
+      "name": "institution_plan",
+      "schema": "public",
+      "values": [
+        "trial",
+        "basic",
+        "pro"
       ]
     },
     "public.memo_category": {

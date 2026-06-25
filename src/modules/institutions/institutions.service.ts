@@ -86,9 +86,7 @@ export class InstitutionsService {
       return {
         institution,
         principal: sanitizeUser(principal),
-        ...(passwordGenerated
-          ? { temporaryPassword: principalPassword }
-          : {}),
+        ...(passwordGenerated ? { temporaryPassword: principalPassword } : {}),
       };
     });
   }
