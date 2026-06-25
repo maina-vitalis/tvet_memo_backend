@@ -12,11 +12,15 @@ async function bootstrap() {
     'cors.origin',
     'http://localhost:3000',
   );
+  const allowedOrigins = corsOrigin
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
   app.use(helmet());
-
+[]
   app.enableCors({
-    origin: corsOrigin,
+    origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
     credentials: true,
   });
 

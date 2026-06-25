@@ -5,10 +5,54 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   Min,
+  registerDecorator,
   validateSync,
+  type ValidationOptions,
 } from 'class-validator';
+
+function isValidOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'http:' || url.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function IsCorsOriginList(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isCorsOriginList',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: unknown) {
+          if (value === undefined || value === null || value === '') {
+            return true;
+          }
+
+          if (typeof value !== 'string') {
+            return false;
+          }
+
+          const origins = value
+            .split(',')
+            .map((origin) => origin.trim())
+            .filter(Boolean);
+
+          return (
+            origins.length > 0 && origins.every((origin) => isValidOrigin(origin))
+          );
+        },
+        defaultMessage() {
+          return 'CORS_ORIGIN must be one or more valid URLs separated by commas';
+        },
+      },
+    });
+  };
+}
 
 class EnvironmentVariables {
   @IsIn(['development', 'production', 'test'])
@@ -40,7 +84,7 @@ class EnvironmentVariables {
   @IsNotEmpty()
   PLATFORM_ADMIN_PASSWORD!: string;
 
-  @IsUrl({ require_tld: false })
+  @IsCorsOriginList()
   @IsOptional()
   CORS_ORIGIN?: string;
 }
