@@ -19,8 +19,7 @@ export class PlatformAuthService {
       'platform.adminPassword',
     );
 
-    const emailMatches =
-      dto.email.toLowerCase() === adminEmail.toLowerCase();
+    const emailMatches = dto.email.toLowerCase() === adminEmail.toLowerCase();
     const passwordMatches = dto.password === adminPassword;
 
     if (!emailMatches || !passwordMatches) {

@@ -28,7 +28,11 @@ export class InstitutionsService {
       dto.principalPassword ?? generateTemporaryPassword();
 
     const [existing] = await this.db
-      .select({ id: institutions.id, subdomain: institutions.subdomain, schoolCode: institutions.schoolCode })
+      .select({
+        id: institutions.id,
+        subdomain: institutions.subdomain,
+        schoolCode: institutions.schoolCode,
+      })
       .from(institutions)
       .where(eq(institutions.subdomain, dto.subdomain))
       .limit(1);
