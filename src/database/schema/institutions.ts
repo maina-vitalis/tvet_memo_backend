@@ -13,6 +13,7 @@ export const institutions = pgTable('institution', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 255 }).notNull(),
   subdomain: varchar('subdomain', { length: 100 }).notNull().unique(),
+  schoolCode: varchar('school_code', { length: 50 }).notNull().unique(),
   plan: institutionPlanEnum('plan').notNull().default('trial'),
   logoUrl: text('logo_url'),
   contactEmail: varchar('contact_email', { length: 255 }).notNull(),

@@ -28,13 +28,23 @@ export class InstitutionsService {
       dto.principalPassword ?? generateTemporaryPassword();
 
     const [existing] = await this.db
-      .select({ id: institutions.id })
+      .select({ id: institutions.id, subdomain: institutions.subdomain, schoolCode: institutions.schoolCode })
       .from(institutions)
       .where(eq(institutions.subdomain, dto.subdomain))
       .limit(1);
 
     if (existing) {
       throw new ConflictException('Subdomain already exists');
+    }
+
+    const [existingSchoolCode] = await this.db
+      .select({ id: institutions.id })
+      .from(institutions)
+      .where(eq(institutions.schoolCode, dto.schoolCode))
+      .limit(1);
+
+    if (existingSchoolCode) {
+      throw new ConflictException('School code already exists');
     }
 
     const passwordHash = await argon2.hash(principalPassword, {
@@ -47,6 +57,7 @@ export class InstitutionsService {
         .values({
           name: dto.name,
           subdomain: dto.subdomain,
+          schoolCode: dto.schoolCode,
           contactEmail: dto.contactEmail,
           plan: dto.plan,
         })

@@ -32,6 +32,11 @@ export class ProvisionInstitutionDto {
   @IsEmail()
   contactEmail!: string;
 
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  schoolCode!: string;
+
   @IsEnum(InstitutionPlan)
   plan!: InstitutionPlan;
 
