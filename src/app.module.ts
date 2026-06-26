@@ -16,6 +16,7 @@ import { MemosModule } from './modules/memos/memos.module';
 import { PlatformModule } from './modules/institutions/platform/platform.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
+import { SuperAdminAuthModule } from './modules/super-admin-auth/super-admin-auth.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { UsersModule } from './modules/users/users.module';
     DepartmentsModule,
     UsersModule,
     MemosModule,
+    SuperAdminAuthModule,
   ],
   controllers: [HealthController],
   providers: [

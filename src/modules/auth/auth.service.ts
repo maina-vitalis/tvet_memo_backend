@@ -12,7 +12,10 @@ import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { institutions, users } from '../../database/schema';
-import { sanitizeUser, generateSessionId } from '../../common/utils/crypto.util';
+import {
+  sanitizeUser,
+  generateSessionId,
+} from '../../common/utils/crypto.util';
 import {
   AuthenticatedUser,
   JwtPayload,
