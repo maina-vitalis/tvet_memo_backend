@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -22,7 +23,18 @@ import {
   sanitizeUser,
 } from '../../common/utils/crypto.util';
 import { MailService } from '../mail/mail.service';
-import { ProvisionInstitutionDto } from './dto/provision-institution.dto';
+import {
+  ProvisionInitialStatus,
+  ProvisionInstitutionDto,
+} from './dto/provision-institution.dto';
+
+const RESERVED_SUBDOMAIN_SLUGS = new Set([
+  'www',
+  'admin',
+  'api',
+  'app',
+  'mail',
+]);
 
 @Injectable()
 export class SuperAdminInstitutionsService {
@@ -33,11 +45,17 @@ export class SuperAdminInstitutionsService {
   ) {}
 
   async provision(dto: ProvisionInstitutionDto) {
-    const rootEmail = dto.rootEmail.toLowerCase();
-    const schoolCode = dto.shortcode.toUpperCase();
-    console.log(rootEmail, schoolCode);
+    const adminEmail = dto.adminEmail;
+    const schoolCode = dto.shortcode;
+    const subdomainSlug = dto.subdomainSlug;
 
-    await this.assertUniqueInstitutionIdentifiers(dto.subdomain, schoolCode);
+    if (RESERVED_SUBDOMAIN_SLUGS.has(subdomainSlug)) {
+      throw new BadRequestException(
+        'This subdomain is reserved. Choose a different slug.',
+      );
+    }
+
+    await this.assertUniqueInstitutionIdentifiers(subdomainSlug, schoolCode);
 
     const passwordHash = await getLockedPasswordHash();
     const setupToken = generateSetupToken();
@@ -47,16 +65,26 @@ export class SuperAdminInstitutionsService {
       72,
     );
     const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
+    const subscriptionEndsAt = new Date(
+      Date.now() + dto.subscriptionDays * 24 * 60 * 60 * 1000,
+    );
+    const { firstName, lastName } = splitAdminFullName(dto.adminFullName);
+    const isActive = dto.initialStatus !== 'pending';
 
     const result = await this.db.transaction(async (tx) => {
       const [institution] = await tx
         .insert(institutions)
         .values({
-          name: dto.name,
-          subdomain: dto.subdomain,
+          name: dto.institutionName,
+          subdomain: subdomainSlug,
           schoolCode,
-          contactEmail: rootEmail,
+          contactEmail: adminEmail,
           seatQuota: dto.seatQuota,
+          status: dto.initialStatus,
+          plan: mapInitialStatusToPlan(dto.initialStatus),
+          isActive,
+          subscriptionEndsAt,
+          provisioningNotes: dto.provisioningNotes ?? null,
         })
         .returning();
 
@@ -85,9 +113,9 @@ export class SuperAdminInstitutionsService {
         .values({
           institutionId: institution.id,
           roleId: institutionalAdminRole.id,
-          firstName: 'Institutional',
-          lastName: 'Administrator',
-          email: rootEmail,
+          firstName,
+          lastName,
+          email: adminEmail,
           passwordHash,
           mustChangePassword: true,
         })
@@ -108,16 +136,21 @@ export class SuperAdminInstitutionsService {
     const setupUrl = `https://${portalBaseDomain}/setup?token=${setupToken}`;
 
     await this.mailService.sendInstitutionWelcomeEmail({
-      to: rootEmail,
-      institutionName: dto.name,
+      to: adminEmail,
+      institutionName: dto.institutionName,
       setupUrl,
     });
 
     return {
-      institution: result.institution,
+      id: result.institution.id,
+      name: result.institution.name,
+      subdomain: result.institution.subdomain,
+      shortcode: result.institution.schoolCode,
+      status: result.institution.status,
+      seatQuota: result.institution.seatQuota,
       rootUser: sanitizeUser(result.rootUser),
       message:
-        'Institution provisioned. A setup link has been sent to the root email.',
+        'Institution provisioned. A setup link has been sent to the admin email.',
     };
   }
 
@@ -129,13 +162,13 @@ export class SuperAdminInstitutionsService {
   }
 
   private async assertUniqueInstitutionIdentifiers(
-    subdomain: string,
+    subdomainSlug: string,
     schoolCode: string,
   ) {
     const [existingSubdomain] = await this.db
       .select({ id: institutions.id })
       .from(institutions)
-      .where(eq(institutions.subdomain, subdomain))
+      .where(eq(institutions.subdomain, subdomainSlug))
       .limit(1);
 
     if (existingSubdomain) {
@@ -152,4 +185,30 @@ export class SuperAdminInstitutionsService {
       throw new ConflictException('Shortcode already exists');
     }
   }
+}
+
+function splitAdminFullName(fullName: string): {
+  firstName: string;
+  lastName: string;
+} {
+  const parts = fullName.trim().split(/\s+/);
+
+  if (parts.length === 1) {
+    return { firstName: parts[0], lastName: 'Administrator' };
+  }
+
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(' '),
+  };
+}
+
+function mapInitialStatusToPlan(
+  initialStatus: ProvisionInitialStatus,
+): 'trial' | 'basic' | 'pro' {
+  if (initialStatus === 'active') {
+    return 'basic';
+  }
+
+  return 'trial';
 }
