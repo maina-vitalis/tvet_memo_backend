@@ -1,4 +1,5 @@
 export * from './enums';
+export * from './super-admins';
 export * from './institutions';
 export * from './roles';
 export * from './users';

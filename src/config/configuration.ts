@@ -8,10 +8,6 @@ export default () => ({
     secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN ?? '7d',
   },
-  platform: {
-    adminEmail: process.env.PLATFORM_ADMIN_EMAIL,
-    adminPassword: process.env.PLATFORM_ADMIN_PASSWORD,
-  },
   cors: {
     origin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
   },

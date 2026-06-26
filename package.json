@@ -22,7 +22,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "seed": "tsx src/database/seed/default-roles.ts"
+    "seed": "tsx src/database/seed/default-roles.ts",
+    "seed:super-admin": "tsx src/database/seed/super-admin.ts"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

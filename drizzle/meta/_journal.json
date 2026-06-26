@@ -15,6 +15,13 @@
       "when": 1782413828878,
       "tag": "0001_superb_snowbird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782455778736,
+      "tag": "0002_silly_post",
+      "breakpoints": true
     }
   ]
 }

@@ -76,14 +76,6 @@ class EnvironmentVariables {
   @IsOptional()
   JWT_EXPIRES_IN?: string;
 
-  @IsString()
-  @IsNotEmpty()
-  PLATFORM_ADMIN_EMAIL!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  PLATFORM_ADMIN_PASSWORD!: string;
-
   @IsCorsOriginList()
   @IsOptional()
   CORS_ORIGIN?: string;
