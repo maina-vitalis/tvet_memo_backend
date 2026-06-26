@@ -26,8 +26,9 @@ export class ProvisionInstitutionDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-    message: 'subdomain must be lowercase alphanumeric with hyphens',
+  @Matches(/^(?:[a-z0-9]+(?:-[a-z0-9]+)*\.)+[a-z]{2,}$/, {
+    message:
+      'subdomain must contain only lowercase letters, numbers, and optional hyphens',
   })
   subdomain!: string;
 
