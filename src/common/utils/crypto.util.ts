@@ -8,6 +8,10 @@ export function generateSessionId(): string {
   return randomUUID();
 }
 
+export function generateOtp(): string {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 export function generateTemporaryPassword(length = 12): string {
   return randomBytes(length)
     .toString('base64url')

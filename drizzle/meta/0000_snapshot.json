@@ -1,5 +1,5 @@
 {
-  "id": "b767dc21-c2f5-4f19-9f53-aa4af83b1aad",
+  "id": "72d50337-7818-43b7-ad4b-cb1cb0468566",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -24,6 +24,12 @@
         "subdomain": {
           "name": "subdomain",
           "type": "varchar(100)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "school_code": {
+          "name": "school_code",
+          "type": "varchar(50)",
           "primaryKey": false,
           "notNull": true
         },
@@ -92,6 +98,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "subdomain"
+          ]
+        },
+        "institution_school_code_unique": {
+          "name": "institution_school_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "school_code"
           ]
         }
       },
@@ -249,6 +262,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "admission_number": {
+          "name": "admission_number",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "staff_number": {
           "name": "staff_number",
           "type": "varchar(50)",
@@ -379,6 +398,14 @@
           "columns": [
             "institution_id",
             "staff_number"
+          ]
+        },
+        "user_institution_admission_number_unique": {
+          "name": "user_institution_admission_number_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "institution_id",
+            "admission_number"
           ]
         }
       },
@@ -581,6 +608,78 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.otp": {
+      "name": "otp",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "institution_id": {
+          "name": "institution_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(6)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "used": {
+          "name": "used",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "otp_institution_id_institution_id_fk": {
+          "name": "otp_institution_id_institution_id_fk",
+          "tableFrom": "otp",
+          "tableTo": "institution",
+          "columnsFrom": [
+            "institution_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

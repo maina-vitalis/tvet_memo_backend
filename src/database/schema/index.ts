@@ -4,6 +4,7 @@ export * from './roles';
 export * from './users';
 export * from './departments';
 export * from './sessions';
+export * from './otps';
 export * from './memos';
 export * from './memo-recipients';
 export * from './attachments';

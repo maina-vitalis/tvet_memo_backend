@@ -9,16 +9,26 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { and, eq } from 'drizzle-orm';
 import { Request } from 'express';
+import { extractEmailDomain } from '../../common/utils/email.util';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { institutions, users } from '../../database/schema';
-import { sanitizeUser, generateSessionId } from '../../common/utils/crypto.util';
+import { institutions, otps, users } from '../../database/schema';
+import {
+  generateOtp,
+  generateSessionId,
+  sanitizeUser,
+} from '../../common/utils/crypto.util';
 import {
   AuthenticatedUser,
   JwtPayload,
 } from '../../common/types/auth-user.type';
 import { AuditService } from '../audit/audit.service';
-import { LoginDto } from './dto/login.dto';
+import { EmailService } from '../email/email.service';
+import {
+  EmailLoginDto,
+  InitiateEmailLoginDto,
+  RegistryLoginDto,
+} from './dto/login.dto';
 import { SessionService } from './session.service';
 
 @Injectable()
@@ -29,15 +39,134 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
     private readonly sessionService: SessionService,
+    private readonly emailService: EmailService,
   ) {}
 
-  async login(dto: LoginDto, req: Request) {
+  // Email flow - Step 1: send OTP after institution discovery
+  async initiateEmailLogin(dto: InitiateEmailLoginDto) {
+    const email = dto.email.toLowerCase();
+    const domain = extractEmailDomain(email);
+
     const [institution] = await this.db
+      .select({
+        id: institutions.id,
+        name: institutions.name,
+        subdomain: institutions.subdomain,
+        isActive: institutions.isActive,
+      })
+      .from(institutions)
+      .where(eq(institutions.id, dto.institutionId))
+      .limit(1);
+
+    if (
+      !institution ||
+      !institution.isActive ||
+      !domain ||
+      institution.subdomain.toLowerCase() !== domain
+    ) {
+      return { message: 'If this email exists, an OTP has been sent' };
+    }
+
+    const [user] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, dto.institutionId),
+          eq(users.email, email),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!user) {
+      return { message: 'If this email exists, an OTP has been sent' };
+    }
+
+    const code = generateOtp();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    try {
+      await this.emailService.sendVerificationCode(
+        email,
+        code,
+        institution.name,
+      );
+    } catch {
+      return { message: 'If this email exists, an OTP has been sent' };
+    }
+
+    await this.db.insert(otps).values({
+      institutionId: dto.institutionId,
+      email,
+      code,
+      expiresAt,
+    });
+
+    return { message: 'If this email exists, an OTP has been sent' };
+  }
+
+  // Email flow - Step 2: verify OTP and sign in
+  async emailLogin(dto: EmailLoginDto, req: Request) {
+    const email = dto.email.toLowerCase();
+    const now = new Date();
+
+    const [institution] = await this.db
+      .select({ id: institutions.id, isActive: institutions.isActive })
+      .from(institutions)
+      .where(eq(institutions.id, dto.institutionId))
+      .limit(1);
+
+    if (!institution || !institution.isActive) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    const [otp] = await this.db
       .select()
+      .from(otps)
+      .where(
+        and(
+          eq(otps.institutionId, dto.institutionId),
+          eq(otps.email, email),
+          eq(otps.code, dto.otp),
+          eq(otps.used, false),
+        ),
+      )
+      .limit(1);
+
+    if (!otp || otp.expiresAt < now) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    await this.db.update(otps).set({ used: true }).where(eq(otps.id, otp.id));
+
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, dto.institutionId),
+          eq(users.email, email),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    return this.createSession(user, dto.institutionId, dto, req);
+  }
+
+  // Shortcode flow: sign in with admission number + password (institution already discovered)
+  async registryLogin(dto: RegistryLoginDto, req: Request) {
+    const [institution] = await this.db
+      .select({ id: institutions.id })
       .from(institutions)
       .where(
         and(
-          eq(institutions.subdomain, dto.subdomain),
+          eq(institutions.id, dto.institutionId),
           eq(institutions.isActive, true),
         ),
       )
@@ -52,8 +181,8 @@ export class AuthService {
       .from(users)
       .where(
         and(
-          eq(users.institutionId, institution.id),
-          eq(users.email, dto.email.toLowerCase()),
+          eq(users.institutionId, dto.institutionId),
+          eq(users.admissionNumber, dto.admissionNumber),
           eq(users.isActive, true),
         ),
       )
@@ -68,6 +197,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    return this.createSession(user, dto.institutionId, dto, req);
+  }
+
+  private async createSession(
+    user: typeof users.$inferSelect,
+    institutionId: string,
+    dto: { deviceName?: string; deviceType?: string },
+    req: Request,
+  ) {
     await this.db
       .update(users)
       .set({ lastLoginAt: new Date() })
@@ -79,7 +217,7 @@ export class AuthService {
     const payload: JwtPayload = {
       sub: user.id,
       jti: sessionId,
-      institutionId: institution.id,
+      institutionId,
       roleId: user.roleId,
       departmentId: user.departmentId,
       email: user.email,
@@ -101,7 +239,7 @@ export class AuthService {
     });
 
     await this.auditService.log({
-      institutionId: institution.id,
+      institutionId,
       actorId: user.id,
       action: 'auth.login',
       entityType: 'user',
@@ -115,11 +253,6 @@ export class AuthService {
       tokenType: 'Bearer' as const,
       expiresIn,
       user: sanitizeUser(user),
-      institution: {
-        id: institution.id,
-        name: institution.name,
-        subdomain: institution.subdomain,
-      },
       mustChangePassword: user.mustChangePassword,
     };
   }

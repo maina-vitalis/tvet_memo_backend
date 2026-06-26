@@ -4,16 +4,36 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { AuthService } from './auth.service';
-import { ChangePasswordDto, LoginDto } from './dto/login.dto';
+import {
+  ChangePasswordDto,
+  EmailLoginDto,
+  InitiateEmailLoginDto,
+  RegistryLoginDto,
+} from './dto/login.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Email flow - Step 1
   @Public()
-  @Post('login')
-  login(@Body() dto: LoginDto, @Req() req: Request) {
-    return this.authService.login(dto, req);
+  @Post('login/email/initiate')
+  initiateEmailLogin(@Body() dto: InitiateEmailLoginDto) {
+    return this.authService.initiateEmailLogin(dto);
+  }
+
+  // Email flow - Step 2
+  @Public()
+  @Post('login/email')
+  emailLogin(@Body() dto: EmailLoginDto, @Req() req: Request) {
+    return this.authService.emailLogin(dto, req);
+  }
+
+  // Shortcode flow: admission number + password (institution already discovered)
+  @Public()
+  @Post('login/registry')
+  registryLogin(@Body() dto: RegistryLoginDto, @Req() req: Request) {
+    return this.authService.registryLogin(dto, req);
   }
 
   @Post('logout')

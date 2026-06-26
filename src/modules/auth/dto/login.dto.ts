@@ -3,19 +3,51 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  MinLength,
+  IsUUID,
+  Length,
 } from 'class-validator';
 
-export class LoginDto {
-  @IsString()
-  @IsNotEmpty()
-  subdomain!: string;
+// Email flow - Step 1: send OTP after institution discovery
+export class InitiateEmailLoginDto {
+  @IsUUID()
+  institutionId!: string;
+
+  @IsEmail()
+  email!: string;
+}
+
+// Email flow - Step 2: verify OTP and sign in
+export class EmailLoginDto {
+  @IsUUID()
+  institutionId!: string;
 
   @IsEmail()
   email!: string;
 
   @IsString()
-  @MinLength(8)
+  @Length(6, 6)
+  otp!: string;
+
+  @IsString()
+  @IsOptional()
+  deviceName?: string;
+
+  @IsString()
+  @IsOptional()
+  deviceType?: string;
+}
+
+// Shortcode flow: sign in with admission number + password (institution already discovered)
+export class RegistryLoginDto {
+  @IsUUID()
+  institutionId!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  admissionNumber!: string;
+
+  @IsString()
+  @IsNotEmpty()
   password!: string;
 
   @IsString()
@@ -29,10 +61,10 @@ export class LoginDto {
 
 export class ChangePasswordDto {
   @IsString()
-  @MinLength(8)
+  @IsNotEmpty()
   currentPassword!: string;
 
   @IsString()
-  @MinLength(8)
+  @IsNotEmpty()
   newPassword!: string;
 }

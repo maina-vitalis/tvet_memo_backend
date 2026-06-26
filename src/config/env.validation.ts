@@ -87,6 +87,23 @@ class EnvironmentVariables {
   @IsCorsOriginList()
   @IsOptional()
   CORS_ORIGIN?: string;
+
+  @IsString()
+  @IsOptional()
+  AZURE_COMMUNICATION_CONNECTION_STRING?: string;
+
+  @IsString()
+  @IsOptional()
+  AZURE_EMAIL_SENDER_ADDRESS?: string;
+
+  @IsString()
+  @IsOptional()
+  PORTAL_BASE_DOMAIN?: string;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  SETUP_TOKEN_EXPIRY_HOURS?: number;
 }
 
 export function validate(config: Record<string, unknown>) {

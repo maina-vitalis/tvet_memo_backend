@@ -10,6 +10,7 @@ CREATE TABLE "institution" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" varchar(255) NOT NULL,
 	"subdomain" varchar(100) NOT NULL,
+	"school_code" varchar(50) NOT NULL,
 	"plan" "institution_plan" DEFAULT 'trial' NOT NULL,
 	"logo_url" text,
 	"contact_email" varchar(255) NOT NULL,
@@ -18,7 +19,8 @@ CREATE TABLE "institution" (
 	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "institution_subdomain_unique" UNIQUE("subdomain")
+	CONSTRAINT "institution_subdomain_unique" UNIQUE("subdomain"),
+	CONSTRAINT "institution_school_code_unique" UNIQUE("school_code")
 );
 --> statement-breakpoint
 CREATE TABLE "role" (
@@ -43,6 +45,7 @@ CREATE TABLE "user" (
 	"first_name" varchar(100) NOT NULL,
 	"last_name" varchar(100) NOT NULL,
 	"email" varchar(255) NOT NULL,
+	"admission_number" varchar(50),
 	"staff_number" varchar(50),
 	"phone_number" varchar(20),
 	"password_hash" text NOT NULL,
@@ -57,7 +60,8 @@ CREATE TABLE "user" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "user_institution_email_unique" UNIQUE("institution_id","email"),
-	CONSTRAINT "user_institution_staff_number_unique" UNIQUE("institution_id","staff_number")
+	CONSTRAINT "user_institution_staff_number_unique" UNIQUE("institution_id","staff_number"),
+	CONSTRAINT "user_institution_admission_number_unique" UNIQUE("institution_id","admission_number")
 );
 --> statement-breakpoint
 CREATE TABLE "department" (
@@ -84,6 +88,16 @@ CREATE TABLE "session" (
 	"expires_at" timestamp with time zone NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "session_token_hash_unique" UNIQUE("token_hash")
+);
+--> statement-breakpoint
+CREATE TABLE "otp" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"institution_id" uuid NOT NULL,
+	"email" varchar(255) NOT NULL,
+	"code" varchar(6) NOT NULL,
+	"expires_at" timestamp with time zone NOT NULL,
+	"used" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "memo" (
@@ -176,6 +190,7 @@ ALTER TABLE "user" ADD CONSTRAINT "user_role_id_role_id_fk" FOREIGN KEY ("role_i
 ALTER TABLE "department" ADD CONSTRAINT "department_institution_id_institution_id_fk" FOREIGN KEY ("institution_id") REFERENCES "public"."institution"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "department" ADD CONSTRAINT "department_head_user_id_user_id_fk" FOREIGN KEY ("head_user_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "otp" ADD CONSTRAINT "otp_institution_id_institution_id_fk" FOREIGN KEY ("institution_id") REFERENCES "public"."institution"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "memo" ADD CONSTRAINT "memo_institution_id_institution_id_fk" FOREIGN KEY ("institution_id") REFERENCES "public"."institution"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "memo" ADD CONSTRAINT "memo_sender_id_user_id_fk" FOREIGN KEY ("sender_id") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "memo_recipient" ADD CONSTRAINT "memo_recipient_memo_id_memo_id_fk" FOREIGN KEY ("memo_id") REFERENCES "public"."memo"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

@@ -5,7 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
+import { extractEmailDomain } from '../../common/utils/email.util';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { institutions, roles, users } from '../../database/schema';
@@ -14,6 +15,10 @@ import {
   generateTemporaryPassword,
   sanitizeUser,
 } from '../../common/utils/crypto.util';
+import {
+  DiscoverInstitutionDto,
+  DiscoveredInstitutionResponse,
+} from './dto/discover-institution.dto';
 import { ProvisionInstitutionDto } from './dto/provision-institution.dto';
 import { UpdateInstitutionDto } from './dto/institution.dto';
 
@@ -156,6 +161,70 @@ export class InstitutionsService {
       .returning();
 
     return updated;
+  }
+
+  async discover(
+    dto: DiscoverInstitutionDto,
+  ): Promise<DiscoveredInstitutionResponse> {
+    const query = dto.query.trim();
+
+    if (dto.mode === 'email') {
+      const domain = extractEmailDomain(query);
+
+      if (!domain) {
+        throw new NotFoundException('Institution not found');
+      }
+
+      const [institution] = await this.db
+        .select({
+          id: institutions.id,
+          name: institutions.name,
+          schoolCode: institutions.schoolCode,
+        })
+        .from(institutions)
+        .where(
+          and(
+            sql`lower(${institutions.subdomain}) = lower(${domain})`,
+            eq(institutions.isActive, true),
+          ),
+        )
+        .limit(1);
+
+      if (!institution) {
+        throw new NotFoundException('Institution not found');
+      }
+
+      return {
+        id: institution.id,
+        name: institution.name,
+        shortcode: institution.schoolCode,
+      };
+    }
+
+    const [institution] = await this.db
+      .select({
+        id: institutions.id,
+        name: institutions.name,
+        schoolCode: institutions.schoolCode,
+      })
+      .from(institutions)
+      .where(
+        and(
+          sql`lower(${institutions.schoolCode}) = lower(${query})`,
+          eq(institutions.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!institution) {
+      throw new NotFoundException('Institution not found');
+    }
+
+    return {
+      id: institution.id,
+      name: institution.name,
+      shortcode: institution.schoolCode,
+    };
   }
 
   async deactivate(id: string) {
