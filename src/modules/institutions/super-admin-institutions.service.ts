@@ -47,15 +47,15 @@ export class SuperAdminInstitutionsService {
   async provision(dto: ProvisionInstitutionDto) {
     const adminEmail = dto.adminEmail;
     const schoolCode = dto.shortcode;
-    const subdomainSlug = dto.subdomainSlug;
+    const subdomain = dto.subdomainSlug;
 
-    if (RESERVED_SUBDOMAIN_SLUGS.has(subdomainSlug)) {
+    if (isReservedInstitutionDomain(subdomain)) {
       throw new BadRequestException(
-        'This subdomain is reserved. Choose a different slug.',
+        'This subdomain is reserved. Choose a different domain.',
       );
     }
 
-    await this.assertUniqueInstitutionIdentifiers(subdomainSlug, schoolCode);
+    await this.assertUniqueInstitutionIdentifiers(subdomain, schoolCode);
 
     const passwordHash = await getLockedPasswordHash();
     const setupToken = generateSetupToken();
@@ -76,7 +76,7 @@ export class SuperAdminInstitutionsService {
         .insert(institutions)
         .values({
           name: dto.institutionName,
-          subdomain: subdomainSlug,
+          subdomain,
           schoolCode,
           contactEmail: adminEmail,
           seatQuota: dto.seatQuota,
@@ -162,13 +162,13 @@ export class SuperAdminInstitutionsService {
   }
 
   private async assertUniqueInstitutionIdentifiers(
-    subdomainSlug: string,
+    subdomain: string,
     schoolCode: string,
   ) {
     const [existingSubdomain] = await this.db
       .select({ id: institutions.id })
       .from(institutions)
-      .where(eq(institutions.subdomain, subdomainSlug))
+      .where(eq(institutions.subdomain, subdomain))
       .limit(1);
 
     if (existingSubdomain) {
@@ -211,4 +211,8 @@ function mapInitialStatusToPlan(
   }
 
   return 'trial';
+}
+
+function isReservedInstitutionDomain(subdomain: string): boolean {
+  return RESERVED_SUBDOMAIN_SLUGS.has(subdomain);
 }
