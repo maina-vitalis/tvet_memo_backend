@@ -5,7 +5,6 @@ import { EmailClient } from '@azure/communication-email';
 export interface InstitutionWelcomeEmailParams {
   to: string;
   institutionName: string;
-  subdomain: string;
   setupUrl: string;
 }
 

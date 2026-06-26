@@ -105,12 +105,11 @@ export class SuperAdminInstitutionsService {
 
     const portalBaseDomain =
       this.configService.getOrThrow<string>('portal.baseDomain');
-    const setupUrl = `https://${dto.subdomain}.${portalBaseDomain}/setup?token=${setupToken}`;
+    const setupUrl = `https://${portalBaseDomain}/setup?token=${setupToken}`;
 
     await this.mailService.sendInstitutionWelcomeEmail({
       to: rootEmail,
       institutionName: dto.name,
-      subdomain: dto.subdomain,
       setupUrl,
     });
 
