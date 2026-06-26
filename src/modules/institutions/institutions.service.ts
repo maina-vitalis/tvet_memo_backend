@@ -5,11 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { extractEmailDomain } from '../../common/utils/email.util';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { institutions, roles, users } from '../../database/schema';
+import { accountSetupTokens, institutions, roles, users } from '../../database/schema';
 import { DEFAULT_ROLES } from '../../database/seed/default-roles';
 import {
   generateTemporaryPassword,
@@ -25,98 +25,6 @@ import { UpdateInstitutionDto } from './dto/institution.dto';
 @Injectable()
 export class InstitutionsService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
-
-  async provision(dto: ProvisionInstitutionDto) {
-    const principalEmail = dto.principalEmail.toLowerCase();
-    const passwordGenerated = !dto.principalPassword;
-    const principalPassword =
-      dto.principalPassword ?? generateTemporaryPassword();
-
-    const [existing] = await this.db
-      .select({
-        id: institutions.id,
-        subdomain: institutions.subdomain,
-        schoolCode: institutions.schoolCode,
-      })
-      .from(institutions)
-      .where(eq(institutions.subdomain, dto.subdomain))
-      .limit(1);
-
-    if (existing) {
-      throw new ConflictException('Subdomain already exists');
-    }
-
-    const [existingSchoolCode] = await this.db
-      .select({ id: institutions.id })
-      .from(institutions)
-      .where(eq(institutions.schoolCode, dto.schoolCode))
-      .limit(1);
-
-    if (existingSchoolCode) {
-      throw new ConflictException('School code already exists');
-    }
-
-    const passwordHash = await argon2.hash(principalPassword, {
-      type: argon2.argon2id,
-    });
-
-    return this.db.transaction(async (tx) => {
-      const [institution] = await tx
-        .insert(institutions)
-        .values({
-          name: dto.name,
-          subdomain: dto.subdomain,
-          schoolCode: dto.schoolCode,
-          contactEmail: dto.contactEmail,
-          plan: dto.plan,
-        })
-        .returning();
-
-      const insertedRoles = await tx
-        .insert(roles)
-        .values(
-          DEFAULT_ROLES.map((role) => ({
-            ...role,
-            institutionId: institution.id,
-          })),
-        )
-        .returning();
-
-      const principalRole = insertedRoles.find(
-        (role) => role.name === 'Principal',
-      );
-
-      if (!principalRole) {
-        throw new NotFoundException('Principal role not found after seeding');
-      }
-
-      const [principal] = await tx
-        .insert(users)
-        .values({
-          institutionId: institution.id,
-          roleId: principalRole.id,
-          firstName: dto.principalFirstName,
-          lastName: dto.principalLastName,
-          email: principalEmail,
-          passwordHash,
-          mustChangePassword: true,
-        })
-        .returning();
-
-      return {
-        institution,
-        principal: sanitizeUser(principal),
-        ...(passwordGenerated ? { temporaryPassword: principalPassword } : {}),
-      };
-    });
-  }
-
-  async findAllForPlatform() {
-    return this.db
-      .select()
-      .from(institutions)
-      .orderBy(desc(institutions.createdAt));
-  }
 
   async findBySubdomain(subdomain: string) {
     const [institution] = await this.db
@@ -237,5 +145,20 @@ export class InstitutionsService {
       .returning();
 
     return updated;
+  }
+
+  async hasPendingSetup(userId: string): Promise<boolean> {
+    const [pending] = await this.db
+      .select({ id: accountSetupTokens.id })
+      .from(accountSetupTokens)
+      .where(
+        and(
+          eq(accountSetupTokens.userId, userId),
+          isNull(accountSetupTokens.usedAt),
+        ),
+      )
+      .limit(1);
+
+    return Boolean(pending);
   }
 }

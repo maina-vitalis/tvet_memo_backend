@@ -19,7 +19,6 @@ async function bootstrap() {
   const isDev = configService.get<string>('nodeEnv') === 'development';
 
   app.use(helmet());
-
   app.enableCors({
     origin: (origin, callback) => {
       if (!origin) {
@@ -52,8 +51,10 @@ async function bootstrap() {
     }),
   );
 
-  const port = configService.get<number>('port', 3000);
-  await app.listen(port);
+  const port = configService.get<number>('port', 5000);
+  await app.listen(port, () => {
+    console.log(`App is running on port ${port}`);
+  });
 }
 
 bootstrap();

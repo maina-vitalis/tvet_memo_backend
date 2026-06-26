@@ -49,3 +49,10 @@ export const institutionPlanEnum = pgEnum('institution_plan', [
   'basic',
   'pro',
 ]);
+
+export const institutionStatusEnum = pgEnum('institution_status', [
+  'trial',
+  'active',
+  'pending',
+  'suspended',
+]);

@@ -1,6 +1,6 @@
 import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 
-export class PlatformLoginDto {
+export class SuperAdminLoginDto {
   @IsEmail()
   email!: string;
 

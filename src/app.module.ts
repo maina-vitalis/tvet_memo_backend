@@ -13,9 +13,10 @@ import { AuthModule } from './modules/auth/auth.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { InstitutionsModule } from './modules/institutions/institutions.module';
 import { MemosModule } from './modules/memos/memos.module';
-import { PlatformModule } from './modules/institutions/platform/platform.module';
+import { MailModule } from './modules/mail/mail.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
+import { SuperAdminAuthModule } from './modules/super-admin-auth/super-admin-auth.module';
 
 @Module({
   imports: [
@@ -27,12 +28,13 @@ import { UsersModule } from './modules/users/users.module';
     DatabaseModule,
     AuditModule,
     AuthModule,
-    PlatformModule,
+    MailModule,
     InstitutionsModule,
     RolesModule,
     DepartmentsModule,
     UsersModule,
     MemosModule,
+    SuperAdminAuthModule,
   ],
   controllers: [HealthController],
   providers: [

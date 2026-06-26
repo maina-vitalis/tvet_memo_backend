@@ -43,7 +43,8 @@ function IsCorsOriginList(validationOptions?: ValidationOptions) {
             .filter(Boolean);
 
           return (
-            origins.length > 0 && origins.every((origin) => isValidOrigin(origin))
+            origins.length > 0 &&
+            origins.every((origin) => isValidOrigin(origin))
           );
         },
         defaultMessage() {
@@ -76,25 +77,9 @@ class EnvironmentVariables {
   @IsOptional()
   JWT_EXPIRES_IN?: string;
 
-  @IsString()
-  @IsNotEmpty()
-  PLATFORM_ADMIN_EMAIL!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  PLATFORM_ADMIN_PASSWORD!: string;
-
   @IsCorsOriginList()
   @IsOptional()
   CORS_ORIGIN?: string;
-
-  @IsString()
-  @IsOptional()
-  AZURE_COMMUNICATION_CONNECTION_STRING?: string;
-
-  @IsString()
-  @IsOptional()
-  AZURE_EMAIL_SENDER_ADDRESS?: string;
 
   @IsString()
   @IsOptional()
@@ -104,6 +89,14 @@ class EnvironmentVariables {
   @Min(1)
   @IsOptional()
   SETUP_TOKEN_EXPIRY_HOURS?: number;
+
+  @IsString()
+  @IsOptional()
+  AZURE_COMMUNICATION_CONNECTION_STRING?: string;
+
+  @IsString()
+  @IsOptional()
+  AZURE_EMAIL_SENDER_ADDRESS?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

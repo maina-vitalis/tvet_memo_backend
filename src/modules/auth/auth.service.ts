@@ -29,6 +29,7 @@ import {
   InitiateEmailLoginDto,
   RegistryLoginDto,
 } from './dto/login.dto';
+import { InstitutionsService } from '../institutions/institutions.service';
 import { SessionService } from './session.service';
 
 @Injectable()
@@ -40,6 +41,7 @@ export class AuthService {
     private readonly auditService: AuditService,
     private readonly sessionService: SessionService,
     private readonly emailService: EmailService,
+    private readonly institutionsService: InstitutionsService,
   ) {}
 
   // Email flow - Step 1: send OTP after institution discovery
@@ -190,6 +192,15 @@ export class AuthService {
 
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const setupPending = await this.institutionsService.hasPendingSetup(
+      user.id,
+    );
+    if (setupPending) {
+      throw new UnauthorizedException(
+        'Account setup is pending. Please use the setup link sent to your email.',
+      );
     }
 
     const passwordValid = await argon2.verify(user.passwordHash, dto.password);
