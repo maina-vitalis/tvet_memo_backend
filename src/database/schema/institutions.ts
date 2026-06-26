@@ -1,6 +1,7 @@
 import {
   boolean,
   char,
+  integer,
   pgTable,
   timestamp,
   uuid,
@@ -17,6 +18,7 @@ export const institutions = pgTable('institution', {
   plan: institutionPlanEnum('plan').notNull().default('trial'),
   logoUrl: text('logo_url'),
   contactEmail: varchar('contact_email', { length: 255 }).notNull(),
+  seatQuota: integer('seat_quota').notNull().default(500),
   countryCode: char('country_code', { length: 2 }).notNull().default('KE'),
   timezone: varchar('timezone', { length: 64 })
     .notNull()

@@ -4,66 +4,59 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import * as argon2 from 'argon2';
-import { desc, eq } from 'drizzle-orm';
+import { ConfigService } from '@nestjs/config';
+import { desc, eq, isNull, and } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { institutions, roles, users } from '../../database/schema';
+import {
+  accountSetupTokens,
+  institutions,
+  roles,
+  users,
+} from '../../database/schema';
 import { DEFAULT_ROLES } from '../../database/seed/default-roles';
 import {
-  generateTemporaryPassword,
+  generateSetupToken,
+  getLockedPasswordHash,
+  hashToken,
   sanitizeUser,
 } from '../../common/utils/crypto.util';
+import { MailService } from '../mail/mail.service';
 import { ProvisionInstitutionDto } from './dto/provision-institution.dto';
 import { UpdateInstitutionDto } from './dto/institution.dto';
 
 @Injectable()
 export class InstitutionsService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly configService: ConfigService,
+    private readonly mailService: MailService,
+  ) {}
 
   async provision(dto: ProvisionInstitutionDto) {
-    const principalEmail = dto.principalEmail.toLowerCase();
-    const passwordGenerated = !dto.principalPassword;
-    const principalPassword =
-      dto.principalPassword ?? generateTemporaryPassword();
+    const rootEmail = dto.rootEmail.toLowerCase();
+    const schoolCode = dto.shortcode.toUpperCase();
 
-    const [existing] = await this.db
-      .select({
-        id: institutions.id,
-        subdomain: institutions.subdomain,
-        schoolCode: institutions.schoolCode,
-      })
-      .from(institutions)
-      .where(eq(institutions.subdomain, dto.subdomain))
-      .limit(1);
+    await this.assertUniqueInstitutionIdentifiers(dto.subdomain, schoolCode);
 
-    if (existing) {
-      throw new ConflictException('Subdomain already exists');
-    }
+    const passwordHash = await getLockedPasswordHash();
+    const setupToken = generateSetupToken();
+    const tokenHash = hashToken(setupToken);
+    const expiryHours = this.configService.get<number>(
+      'setupToken.expiryHours',
+      72,
+    );
+    const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
 
-    const [existingSchoolCode] = await this.db
-      .select({ id: institutions.id })
-      .from(institutions)
-      .where(eq(institutions.schoolCode, dto.schoolCode))
-      .limit(1);
-
-    if (existingSchoolCode) {
-      throw new ConflictException('School code already exists');
-    }
-
-    const passwordHash = await argon2.hash(principalPassword, {
-      type: argon2.argon2id,
-    });
-
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const [institution] = await tx
         .insert(institutions)
         .values({
           name: dto.name,
           subdomain: dto.subdomain,
-          schoolCode: dto.schoolCode,
-          contactEmail: dto.contactEmail,
-          plan: dto.plan,
+          schoolCode,
+          contactEmail: rootEmail,
+          seatQuota: dto.seatQuota,
         })
         .returning();
 
@@ -77,33 +70,56 @@ export class InstitutionsService {
         )
         .returning();
 
-      const principalRole = insertedRoles.find(
-        (role) => role.name === 'Principal',
+      const institutionalAdminRole = insertedRoles.find(
+        (role) => role.name === 'Institutional Admin',
       );
 
-      if (!principalRole) {
-        throw new NotFoundException('Principal role not found after seeding');
+      if (!institutionalAdminRole) {
+        throw new NotFoundException(
+          'Institutional Admin role not found after seeding',
+        );
       }
 
-      const [principal] = await tx
+      const [rootUser] = await tx
         .insert(users)
         .values({
           institutionId: institution.id,
-          roleId: principalRole.id,
-          firstName: dto.principalFirstName,
-          lastName: dto.principalLastName,
-          email: principalEmail,
+          roleId: institutionalAdminRole.id,
+          firstName: 'Institutional',
+          lastName: 'Administrator',
+          email: rootEmail,
           passwordHash,
           mustChangePassword: true,
         })
         .returning();
 
-      return {
-        institution,
-        principal: sanitizeUser(principal),
-        ...(passwordGenerated ? { temporaryPassword: principalPassword } : {}),
-      };
+      await tx.insert(accountSetupTokens).values({
+        institutionId: institution.id,
+        userId: rootUser.id,
+        tokenHash,
+        expiresAt,
+      });
+
+      return { institution, rootUser };
     });
+
+    const portalBaseDomain =
+      this.configService.getOrThrow<string>('portal.baseDomain');
+    const setupUrl = `https://${dto.subdomain}.${portalBaseDomain}/setup?token=${setupToken}`;
+
+    await this.mailService.sendInstitutionWelcomeEmail({
+      to: rootEmail,
+      institutionName: dto.name,
+      subdomain: dto.subdomain,
+      setupUrl,
+    });
+
+    return {
+      institution: result.institution,
+      rootUser: sanitizeUser(result.rootUser),
+      message:
+        'Institution provisioned. A setup link has been sent to the root email.',
+    };
   }
 
   async findAllForPlatform() {
@@ -168,5 +184,45 @@ export class InstitutionsService {
       .returning();
 
     return updated;
+  }
+
+  async hasPendingSetup(userId: string): Promise<boolean> {
+    const [pending] = await this.db
+      .select({ id: accountSetupTokens.id })
+      .from(accountSetupTokens)
+      .where(
+        and(
+          eq(accountSetupTokens.userId, userId),
+          isNull(accountSetupTokens.usedAt),
+        ),
+      )
+      .limit(1);
+
+    return Boolean(pending);
+  }
+
+  private async assertUniqueInstitutionIdentifiers(
+    subdomain: string,
+    schoolCode: string,
+  ) {
+    const [existingSubdomain] = await this.db
+      .select({ id: institutions.id })
+      .from(institutions)
+      .where(eq(institutions.subdomain, subdomain))
+      .limit(1);
+
+    if (existingSubdomain) {
+      throw new ConflictException('Subdomain already exists');
+    }
+
+    const [existingSchoolCode] = await this.db
+      .select({ id: institutions.id })
+      .from(institutions)
+      .where(eq(institutions.schoolCode, schoolCode))
+      .limit(1);
+
+    if (existingSchoolCode) {
+      throw new ConflictException('Shortcode already exists');
+    }
   }
 }

@@ -1,25 +1,27 @@
 import {
   IsEmail,
-  IsEnum,
+  IsInt,
   IsNotEmpty,
-  IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
-  MinLength,
+  Min,
 } from 'class-validator';
-
-export enum InstitutionPlan {
-  TRIAL = 'trial',
-  BASIC = 'basic',
-  PRO = 'pro',
-}
 
 export class ProvisionInstitutionDto {
   @IsString()
   @IsNotEmpty()
   @MaxLength(255)
   name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(50)
+  @Matches(/^[A-Z0-9]+$/, {
+    message: 'shortcode must be uppercase alphanumeric',
+  })
+  shortcode!: string;
 
   @IsString()
   @IsNotEmpty()
@@ -30,31 +32,10 @@ export class ProvisionInstitutionDto {
   subdomain!: string;
 
   @IsEmail()
-  contactEmail!: string;
+  rootEmail!: string;
 
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(50)
-  schoolCode!: string;
-
-  @IsEnum(InstitutionPlan)
-  plan!: InstitutionPlan;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  principalFirstName!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  principalLastName!: string;
-
-  @IsEmail()
-  principalEmail!: string;
-
-  @IsString()
-  @IsOptional()
-  @MinLength(8)
-  principalPassword?: string;
+  @IsInt()
+  @Min(1)
+  @Max(1_000_000)
+  seatQuota!: number;
 }

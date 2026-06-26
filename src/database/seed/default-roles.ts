@@ -16,8 +16,26 @@ export const DEFAULT_ROLES: Omit<NewRole, 'institutionId'>[] = [
     adminRights: { manage_institution: true, manage_roles: true },
   },
   {
-    name: 'Principal',
+    name: 'Institutional Admin',
     hierarchyLevel: 2,
+    isDefault: true,
+    sendScope: {
+      can_broadcast: true,
+      can_target_roles: true,
+      can_target_departments: true,
+      can_target_individuals: true,
+      max_hierarchy_level: 8,
+    },
+    contentAccess: { all: true },
+    adminRights: {
+      manage_institution: true,
+      manage_users: true,
+      manage_roles: true,
+    },
+  },
+  {
+    name: 'Principal',
+    hierarchyLevel: 3,
     isDefault: true,
     sendScope: {
       can_broadcast: true,
@@ -31,7 +49,7 @@ export const DEFAULT_ROLES: Omit<NewRole, 'institutionId'>[] = [
   },
   {
     name: 'Deputy Principal',
-    hierarchyLevel: 3,
+    hierarchyLevel: 4,
     isDefault: true,
     sendScope: {
       can_broadcast: true,
@@ -45,7 +63,7 @@ export const DEFAULT_ROLES: Omit<NewRole, 'institutionId'>[] = [
   },
   {
     name: 'Head of Department',
-    hierarchyLevel: 4,
+    hierarchyLevel: 5,
     isDefault: true,
     sendScope: {
       can_broadcast: false,
@@ -59,7 +77,7 @@ export const DEFAULT_ROLES: Omit<NewRole, 'institutionId'>[] = [
   },
   {
     name: 'Trainer',
-    hierarchyLevel: 5,
+    hierarchyLevel: 6,
     isDefault: true,
     sendScope: {
       can_broadcast: false,
@@ -73,7 +91,7 @@ export const DEFAULT_ROLES: Omit<NewRole, 'institutionId'>[] = [
   },
   {
     name: 'Support Staff',
-    hierarchyLevel: 6,
+    hierarchyLevel: 7,
     isDefault: true,
     sendScope: {
       can_broadcast: false,

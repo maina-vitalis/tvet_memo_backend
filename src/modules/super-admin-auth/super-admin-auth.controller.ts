@@ -4,7 +4,7 @@ import { SuperAdminLoginDto } from './dto/super-admin-login.dto';
 import { SuperAdminAuthService } from './super-admin-auth.service';
 
 @Public()
-@Controller('superAdmin')
+@Controller('superadmin')
 export class SuperAdminAuthController {
   constructor(private readonly superAdminAuthService: SuperAdminAuthService) {}
 

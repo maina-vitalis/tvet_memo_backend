@@ -3,6 +3,7 @@ export * from './super-admins';
 export * from './institutions';
 export * from './roles';
 export * from './users';
+export * from './account-setup-tokens';
 export * from './departments';
 export * from './sessions';
 export * from './memos';

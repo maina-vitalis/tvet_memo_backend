@@ -43,7 +43,8 @@ function IsCorsOriginList(validationOptions?: ValidationOptions) {
             .filter(Boolean);
 
           return (
-            origins.length > 0 && origins.every((origin) => isValidOrigin(origin))
+            origins.length > 0 &&
+            origins.every((origin) => isValidOrigin(origin))
           );
         },
         defaultMessage() {
@@ -79,6 +80,23 @@ class EnvironmentVariables {
   @IsCorsOriginList()
   @IsOptional()
   CORS_ORIGIN?: string;
+
+  @IsString()
+  @IsOptional()
+  PORTAL_BASE_DOMAIN?: string;
+
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  SETUP_TOKEN_EXPIRY_HOURS?: number;
+
+  @IsString()
+  @IsOptional()
+  AZURE_COMMUNICATION_CONNECTION_STRING?: string;
+
+  @IsString()
+  @IsOptional()
+  AZURE_EMAIL_SENDER_ADDRESS?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

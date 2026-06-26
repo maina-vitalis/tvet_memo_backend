@@ -18,7 +18,6 @@ async function bootstrap() {
     .filter(Boolean);
 
   app.use(helmet());
-[]
   app.enableCors({
     origin: allowedOrigins.length === 1 ? allowedOrigins[0] : allowedOrigins,
     credentials: true,
@@ -35,8 +34,10 @@ async function bootstrap() {
     }),
   );
 
-  const port = configService.get<number>('port', 3000);
-  await app.listen(port);
+  const port = configService.get<number>('port', 5000);
+  await app.listen(port, () => {
+    console.log(`App is running on port ${port}`);
+  });
 }
 
 bootstrap();
