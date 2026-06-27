@@ -17,6 +17,7 @@ import { MailModule } from './modules/mail/mail.module';
 import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { SuperAdminAuthModule } from './modules/super-admin-auth/super-admin-auth.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { SuperAdminAuthModule } from './modules/super-admin-auth/super-admin-aut
     UsersModule,
     MemosModule,
     SuperAdminAuthModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [
