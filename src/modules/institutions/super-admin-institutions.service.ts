@@ -317,5 +317,6 @@ function mapInitialStatusToPlan(
 }
 
 function isReservedInstitutionDomain(subdomain: string): boolean {
-  return RESERVED_SUBDOMAIN_SLUGS.has(subdomain);
+  const label = subdomain.trim().toLowerCase().split('.')[0];
+  return RESERVED_SUBDOMAIN_SLUGS.has(label);
 }

@@ -38,11 +38,14 @@ export class ProvisionInstitutionDto {
   shortcode!: string;
 
   @IsString()
-  @MaxLength(40)
-  @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-    message:
-      'subdomainSlug must use lowercase letters, numbers, and hyphens only',
-  })
+  @MaxLength(100)
+  @Matches(
+    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/,
+    {
+      message:
+        'subdomainSlug must be a full domain with an extension (e.g. eldoretpolytechnic.ac.ke)',
+    },
+  )
   @Transform(({ value }) =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
