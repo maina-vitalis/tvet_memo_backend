@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import {
@@ -14,6 +14,15 @@ import {
   institutions,
   roles,
   users,
+  sessions,
+  memoRecipients,
+  attachments,
+  messageThreads,
+  notifications,
+  otps,
+  auditLogs,
+  memos,
+  departments,
 } from '../../database/schema';
 import { DEFAULT_ROLES } from '../../database/seed/default-roles';
 import {
@@ -27,6 +36,7 @@ import {
   ProvisionInitialStatus,
   ProvisionInstitutionDto,
 } from './dto/provision-institution.dto';
+import { UpdateInstitutionDto } from './dto/update-institution.dto';
 
 const RESERVED_SUBDOMAIN_SLUGS = new Set([
   'www',
@@ -159,6 +169,91 @@ export class SuperAdminInstitutionsService {
       .select()
       .from(institutions)
       .orderBy(desc(institutions.createdAt));
+  }
+
+  async update(id: string, dto: UpdateInstitutionDto) {
+    const [existing] = await this.db
+      .select()
+      .from(institutions)
+      .where(eq(institutions.id, id))
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException('Institution not found');
+    }
+
+    const [updated] = await this.db
+      .update(institutions)
+      .set({
+        ...dto,
+        updatedAt: new Date(),
+      })
+      .where(eq(institutions.id, id))
+      .returning();
+
+    return updated;
+  }
+
+  async remove(id: string) {
+    const [existing] = await this.db
+      .select()
+      .from(institutions)
+      .where(eq(institutions.id, id))
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException('Institution not found');
+    }
+
+    await this.db.transaction(async (tx) => {
+      // Find all users belonging to this institution
+      const institutionUsers = await tx
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.institutionId, id));
+      const userIds = institutionUsers.map((u) => u.id);
+
+      if (userIds.length > 0) {
+        // Delete sessions for these users
+        await tx.delete(sessions).where(inArray(sessions.userId, userIds));
+        // Delete memo_recipients for these users
+        await tx.delete(memoRecipients).where(inArray(memoRecipients.userId, userIds));
+        // Delete attachments uploaded by these users
+        await tx.delete(attachments).where(inArray(attachments.uploadedBy, userIds));
+      }
+
+      // Delete message threads for this institution
+      await tx.delete(messageThreads).where(eq(messageThreads.institutionId, id));
+
+      // Delete notifications for this institution
+      await tx.delete(notifications).where(eq(notifications.institutionId, id));
+
+      // Delete otps for this institution
+      await tx.delete(otps).where(eq(otps.institutionId, id));
+
+      // Delete setup tokens
+      await tx.delete(accountSetupTokens).where(eq(accountSetupTokens.institutionId, id));
+
+      // Delete audit logs
+      await tx.delete(auditLogs).where(eq(auditLogs.institutionId, id));
+
+      // Delete memos
+      await tx.delete(memos).where(eq(memos.institutionId, id));
+
+      // Delete users
+      await tx.delete(users).where(eq(users.institutionId, id));
+
+      // Delete departments
+      await tx.delete(departments).where(eq(departments.institutionId, id));
+
+      // Delete roles
+      await tx.delete(roles).where(eq(roles.institutionId, id));
+
+      // Finally, delete the institution
+      await tx.delete(institutions).where(eq(institutions.id, id));
+    });
+
+    return { success: true, message: 'Institution deleted successfully' };
   }
 
   private async assertUniqueInstitutionIdentifiers(
