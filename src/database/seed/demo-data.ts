@@ -305,6 +305,7 @@ async function ensureSession(db: DrizzleDB, userIds: IdMap) {
   }
 
   await db.insert(sessions).values({
+    actorType: 'user',
     userId,
     tokenHash,
     deviceName: 'Seed Demo Browser',

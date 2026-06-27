@@ -33,7 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid token');
     }
 
-    await this.sessionService.assertActive(payload.jti, token);
+    await this.sessionService.assertActive(payload.jti, token, 'user');
 
     return {
       id: payload.sub,

@@ -2,10 +2,10 @@ import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { and, eq } from 'drizzle-orm';
+import { Request } from 'express';
 import {
   ExtractJwt,
   Strategy,
-  type StrategyOptionsWithoutRequest,
 } from 'passport-jwt';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
@@ -14,6 +14,7 @@ import {
   AuthenticatedSuperAdmin,
   SuperAdminJwtPayload,
 } from '../../common/types/super-admin.type';
+import { SessionService } from '../auth/session.service';
 
 function isSuperAdminJwtPayload(
   payload: unknown,
@@ -25,6 +26,7 @@ function isSuperAdminJwtPayload(
   const candidate = payload as SuperAdminJwtPayload;
   return (
     typeof candidate.sub === 'string' &&
+    typeof candidate.jti === 'string' &&
     candidate.type === 'super-admin' &&
     typeof candidate.email === 'string'
   );
@@ -38,19 +40,34 @@ export class SuperAdminJwtStrategy extends PassportStrategy<
   constructor(
     configService: ConfigService,
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly sessionService: SessionService,
   ) {
-    const options: StrategyOptionsWithoutRequest = {
+    super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('jwt.secret'),
-    };
-    super(options);
+      passReqToCallback: true,
+    });
   }
 
-  async validate(payload: unknown): Promise<AuthenticatedSuperAdmin> {
+  async validate(
+    req: Request,
+    payload: unknown,
+  ): Promise<AuthenticatedSuperAdmin> {
     if (!isSuperAdminJwtPayload(payload)) {
       throw new UnauthorizedException('Invalid super admin token');
     }
+
+    const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+    if (!token) {
+      throw new UnauthorizedException('Invalid super admin token');
+    }
+
+    await this.sessionService.assertActive(
+      payload.jti,
+      token,
+      'super_admin',
+    );
 
     const [superAdmin] = await this.db
       .select({
@@ -69,6 +86,7 @@ export class SuperAdminJwtStrategy extends PassportStrategy<
 
     return {
       id: superAdmin.id,
+      sessionId: payload.jti,
       email: superAdmin.email,
     };
   }

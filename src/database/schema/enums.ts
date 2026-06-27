@@ -56,3 +56,8 @@ export const institutionStatusEnum = pgEnum('institution_status', [
   'pending',
   'suspended',
 ]);
+
+export const sessionActorTypeEnum = pgEnum('session_actor_type', [
+  'user',
+  'super_admin',
+]);

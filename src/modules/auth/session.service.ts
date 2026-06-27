@@ -6,15 +6,26 @@ import { DrizzleDB } from '../../database/drizzle';
 import { sessions } from '../../database/schema';
 import { hashToken } from '../../common/utils/crypto.util';
 
-export interface CreateSessionInput {
+type SessionActorType = 'user' | 'super_admin';
+
+interface BaseCreateSessionInput {
   sessionId: string;
-  userId: string;
   token: string;
   deviceName?: string;
   deviceType?: string;
   ipAddress?: string;
   userAgent?: string;
 }
+
+export type CreateSessionInput =
+  | (BaseCreateSessionInput & {
+      actorType: 'user';
+      userId: string;
+    })
+  | (BaseCreateSessionInput & {
+      actorType: 'super_admin';
+      superAdminId: string;
+    });
 
 @Injectable()
 export class SessionService {
@@ -27,37 +38,61 @@ export class SessionService {
     const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
     const expiresAt = this.resolveExpiry(expiresIn);
 
+    const values =
+      input.actorType === 'user'
+        ? {
+            id: input.sessionId,
+            actorType: 'user' as const,
+            userId: input.userId,
+            tokenHash: hashToken(input.token),
+            deviceName: input.deviceName,
+            deviceType: input.deviceType,
+            ipAddress: input.ipAddress,
+            userAgent: input.userAgent,
+            expiresAt,
+          }
+        : {
+            id: input.sessionId,
+            actorType: 'super_admin' as const,
+            superAdminId: input.superAdminId,
+            tokenHash: hashToken(input.token),
+            deviceName: input.deviceName,
+            deviceType: input.deviceType,
+            ipAddress: input.ipAddress,
+            userAgent: input.userAgent,
+            expiresAt,
+          };
+
     const [session] = await this.db
       .insert(sessions)
-      .values({
-        id: input.sessionId,
-        userId: input.userId,
-        tokenHash: hashToken(input.token),
-        deviceName: input.deviceName,
-        deviceType: input.deviceType,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
-        expiresAt,
-      })
+      .values(values)
       .returning({ id: sessions.id });
 
     return session.id;
   }
 
-  async assertActive(sessionId: string, token: string): Promise<void> {
+  async assertActive(
+    sessionId: string,
+    token: string,
+    actorType?: SessionActorType,
+  ): Promise<void> {
     const now = new Date();
+
+    const conditions = [
+      eq(sessions.id, sessionId),
+      eq(sessions.tokenHash, hashToken(token)),
+      eq(sessions.isActive, true),
+      gt(sessions.expiresAt, now),
+    ];
+
+    if (actorType) {
+      conditions.push(eq(sessions.actorType, actorType));
+    }
 
     const [session] = await this.db
       .select({ id: sessions.id })
       .from(sessions)
-      .where(
-        and(
-          eq(sessions.id, sessionId),
-          eq(sessions.tokenHash, hashToken(token)),
-          eq(sessions.isActive, true),
-          gt(sessions.expiresAt, now),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1);
 
     if (!session) {

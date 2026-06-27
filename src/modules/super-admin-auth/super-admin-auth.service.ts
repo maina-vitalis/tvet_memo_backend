@@ -3,11 +3,16 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { and, eq } from 'drizzle-orm';
+import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { superAdmins } from '../../database/schema';
 import { SuperAdminJwtPayload } from '../../common/types/super-admin.type';
-import { sanitizeUser } from '../../common/utils/crypto.util';
+import {
+  generateSessionId,
+  sanitizeUser,
+} from '../../common/utils/crypto.util';
+import { SessionService } from '../auth/session.service';
 import { SuperAdminLoginDto } from './dto/super-admin-login.dto';
 
 @Injectable()
@@ -16,9 +21,10 @@ export class SuperAdminAuthService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly sessionService: SessionService,
   ) {}
 
-  async login(dto: SuperAdminLoginDto) {
+  async login(dto: SuperAdminLoginDto, req: Request) {
     const [superAdmin] = await this.db
       .select()
       .from(superAdmins)
@@ -48,14 +54,26 @@ export class SuperAdminAuthService {
       .where(eq(superAdmins.id, superAdmin.id));
 
     const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
+    const sessionId = generateSessionId();
 
     const payload: SuperAdminJwtPayload = {
       sub: superAdmin.id,
+      jti: sessionId,
       type: 'super-admin',
       email: superAdmin.email,
     };
 
     const accessToken = await this.jwtService.signAsync(payload);
+
+    await this.sessionService.create({
+      sessionId,
+      actorType: 'super_admin',
+      superAdminId: superAdmin.id,
+      token: accessToken,
+      deviceType: 'web',
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
 
     return {
       accessToken,
@@ -63,5 +81,11 @@ export class SuperAdminAuthService {
       expiresIn,
       superAdmin: sanitizeUser(superAdmin),
     };
+  }
+
+  async logout(sessionId: string) {
+    await this.sessionService.revoke(sessionId);
+
+    return { message: 'Logged out successfully' };
   }
 }

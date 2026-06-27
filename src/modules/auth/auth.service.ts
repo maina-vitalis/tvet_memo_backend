@@ -7,15 +7,23 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { Request } from 'express';
+import { hasAdminPortalAccess } from '../../common/utils/admin-rights.util';
 import { extractEmailDomain } from '../../common/utils/email.util';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { institutions, otps, users } from '../../database/schema';
+import {
+  accountSetupTokens,
+  institutions,
+  otps,
+  roles,
+  users,
+} from '../../database/schema';
 import {
   generateOtp,
   generateSessionId,
+  hashToken,
   sanitizeUser,
 } from '../../common/utils/crypto.util';
 import {
@@ -24,6 +32,11 @@ import {
 } from '../../common/types/auth-user.type';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../email/email.service';
+import {
+  AdminLoginDto,
+  CompleteAccountSetupDto,
+  VerifySetupTokenDto,
+} from './dto/admin-auth.dto';
 import {
   EmailLoginDto,
   InitiateEmailLoginDto,
@@ -161,6 +174,139 @@ export class AuthService {
     return this.createSession(user, dto.institutionId, dto, req);
   }
 
+  async adminLogin(dto: AdminLoginDto, req: Request) {
+    const subdomain = dto.subdomain.trim().toLowerCase();
+    const email = dto.email.toLowerCase();
+
+    const institution = await this.institutionsService.findBySubdomain(subdomain);
+
+    const [record] = await this.db
+      .select({
+        user: users,
+        role: roles,
+      })
+      .from(users)
+      .innerJoin(roles, eq(users.roleId, roles.id))
+      .where(
+        and(
+          eq(users.institutionId, institution.id),
+          eq(users.email, email),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (
+      !record ||
+      !hasAdminPortalAccess(
+        record.role.adminRights as Record<string, unknown> | null,
+      )
+    ) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const setupPending = await this.institutionsService.hasPendingSetup(
+      record.user.id,
+    );
+    if (setupPending) {
+      throw new UnauthorizedException(
+        'Account setup is pending. Please use the setup link sent to your email.',
+      );
+    }
+
+    const passwordValid = await argon2.verify(
+      record.user.passwordHash,
+      dto.password,
+    );
+    if (!passwordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const session = await this.createSession(
+      record.user,
+      institution.id,
+      dto,
+      req,
+    );
+
+    return {
+      ...session,
+      institution: {
+        id: institution.id,
+        name: institution.name,
+        subdomain: institution.subdomain,
+      },
+    };
+  }
+
+  async verifySetupToken(dto: VerifySetupTokenDto) {
+    const record = await this.findValidSetupToken(dto.token);
+
+    if (!record) {
+      throw new BadRequestException('Invalid or expired setup link');
+    }
+
+    return {
+      institutionName: record.institution.name,
+      subdomain: record.institution.subdomain,
+      adminEmail: record.user.email,
+      adminName: `${record.user.firstName} ${record.user.lastName}`,
+      expiresAt: record.token.expiresAt.toISOString(),
+    };
+  }
+
+  async completeAccountSetup(dto: CompleteAccountSetupDto, req: Request) {
+    const record = await this.findValidSetupToken(dto.token);
+
+    if (!record) {
+      throw new BadRequestException('Invalid or expired setup link');
+    }
+
+    const passwordHash = await argon2.hash(dto.password, {
+      type: argon2.argon2id,
+    });
+
+    const [updatedUser] = await this.db
+      .update(users)
+      .set({
+        passwordHash,
+        mustChangePassword: false,
+      })
+      .where(eq(users.id, record.user.id))
+      .returning();
+
+    await this.db
+      .update(accountSetupTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(accountSetupTokens.id, record.token.id));
+
+    const session = await this.createSession(
+      updatedUser,
+      record.institution.id,
+      dto,
+      req,
+    );
+
+    await this.auditService.log({
+      institutionId: record.institution.id,
+      actorId: updatedUser.id,
+      action: 'user.account_setup_completed',
+      entityType: 'user',
+      entityId: updatedUser.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
+    return {
+      ...session,
+      institution: {
+        id: record.institution.id,
+        name: record.institution.name,
+        subdomain: record.institution.subdomain,
+      },
+    };
+  }
+
   // Shortcode flow: sign in with admission number + password (institution already discovered)
   async registryLogin(dto: RegistryLoginDto, req: Request) {
     const [institution] = await this.db
@@ -211,6 +357,37 @@ export class AuthService {
     return this.createSession(user, dto.institutionId, dto, req);
   }
 
+  private async findValidSetupToken(token: string) {
+    const tokenHash = hashToken(token);
+    const now = new Date();
+
+    const [record] = await this.db
+      .select({
+        token: accountSetupTokens,
+        user: users,
+        institution: institutions,
+      })
+      .from(accountSetupTokens)
+      .innerJoin(users, eq(accountSetupTokens.userId, users.id))
+      .innerJoin(
+        institutions,
+        eq(accountSetupTokens.institutionId, institutions.id),
+      )
+      .where(
+        and(
+          eq(accountSetupTokens.tokenHash, tokenHash),
+          isNull(accountSetupTokens.usedAt),
+        ),
+      )
+      .limit(1);
+
+    if (!record || record.token.expiresAt < now) {
+      return null;
+    }
+
+    return record;
+  }
+
   private async createSession(
     user: typeof users.$inferSelect,
     institutionId: string,
@@ -241,6 +418,7 @@ export class AuthService {
 
     await this.sessionService.create({
       sessionId,
+      actorType: 'user',
       userId: user.id,
       token: accessToken,
       deviceName: dto.deviceName,

@@ -3,6 +3,7 @@ import { institutions } from './institutions';
 import { roles } from './roles';
 import { departments } from './departments';
 import { users } from './users';
+import { superAdmins } from './super-admins';
 import { sessions } from './sessions';
 import { memos } from './memos';
 import { memoRecipients } from './memo-recipients';
@@ -63,6 +64,10 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, {
     fields: [sessions.userId],
     references: [users.id],
+  }),
+  superAdmin: one(superAdmins, {
+    fields: [sessions.superAdminId],
+    references: [superAdmins.id],
   }),
 }));
 

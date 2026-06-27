@@ -8,6 +8,13 @@
       "when": 1782549953072,
       "tag": "20260627084553_glorious_cable",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1782561109487,
+      "tag": "20260627115149_curly_rocket_raccoon",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,11 @@ import { Public } from '../../common/decorators/public.decorator';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { AuthService } from './auth.service';
 import {
+  AdminLoginDto,
+  CompleteAccountSetupDto,
+  VerifySetupTokenDto,
+} from './dto/admin-auth.dto';
+import {
   ChangePasswordDto,
   EmailLoginDto,
   InitiateEmailLoginDto,
@@ -15,7 +20,29 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // Email flow - Step 1
+  // Institution admin portal login
+  @Public()
+  @Post('login')
+  adminLogin(@Body() dto: AdminLoginDto, @Req() req: Request) {
+    return this.authService.adminLogin(dto, req);
+  }
+
+  @Public()
+  @Post('setup/verify')
+  verifySetupToken(@Body() dto: VerifySetupTokenDto) {
+    return this.authService.verifySetupToken(dto);
+  }
+
+  @Public()
+  @Post('setup/complete')
+  completeAccountSetup(
+    @Body() dto: CompleteAccountSetupDto,
+    @Req() req: Request,
+  ) {
+    return this.authService.completeAccountSetup(dto, req);
+  }
+
+  // Email flow - Step 1 Institution discovery + email verification code generation
   @Public()
   @Post('login/email/initiate')
   initiateEmailLogin(@Body() dto: InitiateEmailLoginDto) {
