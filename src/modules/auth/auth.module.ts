@@ -8,13 +8,14 @@ import { InstitutionsModule } from '../institutions/institutions.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './jwt.strategy';
-import { SessionService } from './session.service';
+import { SessionModule } from './session.module';
 
 @Module({
   imports: [
     AuditModule,
     EmailModule,
     InstitutionsModule,
+    SessionModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -31,7 +32,7 @@ import { SessionService } from './session.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, SessionService],
-  exports: [AuthService, JwtModule, SessionService],
+  providers: [AuthService, JwtStrategy],
+  exports: [AuthService, JwtModule, SessionModule],
 })
 export class AuthModule {}

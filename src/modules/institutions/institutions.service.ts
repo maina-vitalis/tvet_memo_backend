@@ -77,35 +77,36 @@ export class InstitutionsService {
     const query = dto.query.trim();
 
     if (dto.mode === 'email') {
-      const domain = extractEmailDomain(query);
 
-      if (!domain) {
-        throw new NotFoundException('Institution not found');
-      }
+      const email = query.toLowerCase();
 
-      const [institution] = await this.db
+      const [record] = await this.db
         .select({
           id: institutions.id,
           name: institutions.name,
           schoolCode: institutions.schoolCode,
+          subdomain: institutions.subdomain,
         })
-        .from(institutions)
+        .from(users)
+        .innerJoin(institutions, eq(users.institutionId, institutions.id))
         .where(
           and(
-            sql`lower(${institutions.subdomain}) = lower(${domain})`,
+            eq(users.email, email),
+            eq(users.isActive, true),
             eq(institutions.isActive, true),
           ),
         )
         .limit(1);
 
-      if (!institution) {
-        throw new NotFoundException('Institution not found');
+      if (!record) {
+        throw new NotFoundException('Institution not found for this email');
       }
 
       return {
-        id: institution.id,
-        name: institution.name,
-        shortcode: institution.schoolCode,
+        id: record.id,
+        name: record.name,
+        shortcode: record.schoolCode,
+        subdomain: record.subdomain,
       };
     }
 
@@ -114,6 +115,7 @@ export class InstitutionsService {
         id: institutions.id,
         name: institutions.name,
         schoolCode: institutions.schoolCode,
+        subdomain: institutions.subdomain,
       })
       .from(institutions)
       .where(
@@ -132,6 +134,7 @@ export class InstitutionsService {
       id: institution.id,
       name: institution.name,
       shortcode: institution.schoolCode,
+      subdomain: institution.subdomain,
     };
   }
 

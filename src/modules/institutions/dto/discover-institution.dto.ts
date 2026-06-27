@@ -14,4 +14,5 @@ export type DiscoveredInstitutionResponse = {
   id: string;
   name: string;
   shortcode: string;
+  subdomain: string;
 };
