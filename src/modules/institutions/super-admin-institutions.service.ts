@@ -217,13 +217,19 @@ export class SuperAdminInstitutionsService {
         // Delete sessions for these users
         await tx.delete(sessions).where(inArray(sessions.userId, userIds));
         // Delete memo_recipients for these users
-        await tx.delete(memoRecipients).where(inArray(memoRecipients.userId, userIds));
+        await tx
+          .delete(memoRecipients)
+          .where(inArray(memoRecipients.userId, userIds));
         // Delete attachments uploaded by these users
-        await tx.delete(attachments).where(inArray(attachments.uploadedBy, userIds));
+        await tx
+          .delete(attachments)
+          .where(inArray(attachments.uploadedBy, userIds));
       }
 
       // Delete message threads for this institution
-      await tx.delete(messageThreads).where(eq(messageThreads.institutionId, id));
+      await tx
+        .delete(messageThreads)
+        .where(eq(messageThreads.institutionId, id));
 
       // Delete notifications for this institution
       await tx.delete(notifications).where(eq(notifications.institutionId, id));
@@ -232,7 +238,9 @@ export class SuperAdminInstitutionsService {
       await tx.delete(otps).where(eq(otps.institutionId, id));
 
       // Delete setup tokens
-      await tx.delete(accountSetupTokens).where(eq(accountSetupTokens.institutionId, id));
+      await tx
+        .delete(accountSetupTokens)
+        .where(eq(accountSetupTokens.institutionId, id));
 
       // Delete audit logs
       await tx.delete(auditLogs).where(eq(auditLogs.institutionId, id));
