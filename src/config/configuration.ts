@@ -23,5 +23,4 @@ export default () => ({
   setupToken: {
     expiryHours: parseInt(process.env.SETUP_TOKEN_EXPIRY_HOURS ?? '72', 10),
   },
-  },
 });
