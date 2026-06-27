@@ -1,7 +1,11 @@
 import 'dotenv/config';
 import postgres from 'postgres';
 
-const sql = postgres(process.env.DATABASE_URL, { max: 1 });
+const sql = postgres(process.env.DATABASE_URL, {
+  max: 1,
+  prepare: false,
+  ssl: 'require',
+});
 
 try {
   console.log('Dropping public and drizzle schemas...');
