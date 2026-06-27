@@ -38,9 +38,13 @@ import {
   VerifySetupTokenDto,
 } from './dto/admin-auth.dto';
 import {
+  CheckEmailLoginDto,
+  CompleteEmailSetupDto,
   EmailLoginDto,
+  EmailPasswordLoginDto,
   InitiateEmailLoginDto,
   RegistryLoginDto,
+  ValidateEmailOtpDto,
 } from './dto/login.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
 import { SessionService } from './session.service';
@@ -119,6 +123,215 @@ export class AuthService {
     });
 
     return { message: 'If this email exists, an OTP has been sent' };
+  }
+
+  async checkEmailLogin(dto: CheckEmailLoginDto) {
+    const email = dto.email.toLowerCase();
+    const domain = extractEmailDomain(email);
+
+    const [institution] = await this.db
+      .select({
+        id: institutions.id,
+        subdomain: institutions.subdomain,
+        isActive: institutions.isActive,
+      })
+      .from(institutions)
+      .where(eq(institutions.id, dto.institutionId))
+      .limit(1);
+
+    if (
+      !institution ||
+      !institution.isActive ||
+      !domain ||
+      institution.subdomain.toLowerCase() !== domain
+    ) {
+      return { message: 'If this email exists, you can continue' };
+    }
+
+    const [user] = await this.db
+      .select({
+        id: users.id,
+        mustChangePassword: users.mustChangePassword,
+      })
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, dto.institutionId),
+          eq(users.email, email),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!user) {
+      return { message: 'If this email exists, you can continue' };
+    }
+
+    const setupPending = await this.institutionsService.hasPendingSetup(
+      user.id,
+    );
+
+    return {
+      isFirstSetup: user.mustChangePassword || setupPending,
+    };
+  }
+
+  async validateEmailOtp(dto: ValidateEmailOtpDto) {
+    const otp = await this.findValidEmailOtp(
+      dto.institutionId,
+      dto.email,
+      dto.otp,
+    );
+
+    if (!otp) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    const [user] = await this.db
+      .select({
+        id: users.id,
+        mustChangePassword: users.mustChangePassword,
+      })
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, dto.institutionId),
+          eq(users.email, dto.email.toLowerCase()),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    const setupPending = await this.institutionsService.hasPendingSetup(
+      user.id,
+    );
+
+    return {
+      verified: true,
+      isFirstSetup: user.mustChangePassword || setupPending,
+    };
+  }
+
+  async emailPasswordLogin(dto: EmailPasswordLoginDto, req: Request) {
+    const email = dto.email.toLowerCase();
+
+    const [institution] = await this.db
+      .select({ id: institutions.id, isActive: institutions.isActive })
+      .from(institutions)
+      .where(eq(institutions.id, dto.institutionId))
+      .limit(1);
+
+    if (!institution || !institution.isActive) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, dto.institutionId),
+          eq(users.email, email),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const setupPending = await this.institutionsService.hasPendingSetup(
+      user.id,
+    );
+
+    if (user.mustChangePassword || setupPending) {
+      throw new UnauthorizedException(
+        'Account setup is incomplete. Please verify your email first.',
+      );
+    }
+
+    const passwordValid = await argon2.verify(user.passwordHash, dto.password);
+    if (!passwordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return this.createSession(user, dto.institutionId, dto, req);
+  }
+
+  async completeEmailSetup(dto: CompleteEmailSetupDto, req: Request) {
+    const email = dto.email.toLowerCase();
+    const otp = await this.findValidEmailOtp(
+      dto.institutionId,
+      email,
+      dto.otp,
+    );
+
+    if (!otp) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, dto.institutionId),
+          eq(users.email, email),
+          eq(users.isActive, true),
+        ),
+      )
+      .limit(1);
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired OTP');
+    }
+
+    const setupPending = await this.institutionsService.hasPendingSetup(
+      user.id,
+    );
+
+    if (!user.mustChangePassword && !setupPending) {
+      throw new BadRequestException('Account setup is already complete');
+    }
+
+    const passwordHash = await argon2.hash(dto.password, {
+      type: argon2.argon2id,
+    });
+
+    const [updatedUser] = await this.db
+      .update(users)
+      .set({
+        passwordHash,
+        mustChangePassword: false,
+      })
+      .where(eq(users.id, user.id))
+      .returning();
+
+    await this.db.update(otps).set({ used: true }).where(eq(otps.id, otp.id));
+
+    const session = await this.createSession(
+      updatedUser,
+      dto.institutionId,
+      dto,
+      req,
+    );
+
+    await this.auditService.log({
+      institutionId: dto.institutionId,
+      actorId: updatedUser.id,
+      action: 'user.account_setup_completed',
+      entityType: 'user',
+      entityId: updatedUser.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
+    return session;
   }
 
   // Email flow - Step 2: verify OTP and sign in
@@ -356,6 +569,33 @@ export class AuthService {
     }
 
     return this.createSession(user, dto.institutionId, dto, req);
+  }
+
+  private async findValidEmailOtp(
+    institutionId: string,
+    email: string,
+    code: string,
+  ) {
+    const now = new Date();
+
+    const [otp] = await this.db
+      .select()
+      .from(otps)
+      .where(
+        and(
+          eq(otps.institutionId, institutionId),
+          eq(otps.email, email.toLowerCase()),
+          eq(otps.code, code),
+          eq(otps.used, false),
+        ),
+      )
+      .limit(1);
+
+    if (!otp || otp.expiresAt < now) {
+      return null;
+    }
+
+    return otp;
   }
 
   private async findValidSetupToken(token: string) {

@@ -11,9 +11,13 @@ import {
 } from './dto/admin-auth.dto';
 import {
   ChangePasswordDto,
+  CheckEmailLoginDto,
+  CompleteEmailSetupDto,
   EmailLoginDto,
+  EmailPasswordLoginDto,
   InitiateEmailLoginDto,
   RegistryLoginDto,
+  ValidateEmailOtpDto,
 } from './dto/login.dto';
 
 @Controller('auth')
@@ -49,7 +53,31 @@ export class AuthController {
     return this.authService.initiateEmailLogin(dto);
   }
 
-  // Email flow - Step 2
+  @Public()
+  @Post('login/email/check')
+  checkEmailLogin(@Body() dto: CheckEmailLoginDto) {
+    return this.authService.checkEmailLogin(dto);
+  }
+
+  @Public()
+  @Post('login/email/validate-otp')
+  validateEmailOtp(@Body() dto: ValidateEmailOtpDto) {
+    return this.authService.validateEmailOtp(dto);
+  }
+
+  @Public()
+  @Post('login/email/password')
+  emailPasswordLogin(@Body() dto: EmailPasswordLoginDto, @Req() req: Request) {
+    return this.authService.emailPasswordLogin(dto, req);
+  }
+
+  @Public()
+  @Post('login/email/complete-setup')
+  completeEmailSetup(@Body() dto: CompleteEmailSetupDto, @Req() req: Request) {
+    return this.authService.completeEmailSetup(dto, req);
+  }
+
+  // Email flow - Step 2 (legacy: verify OTP and sign in directly)
   @Public()
   @Post('login/email')
   emailLogin(@Body() dto: EmailLoginDto, @Req() req: Request) {
