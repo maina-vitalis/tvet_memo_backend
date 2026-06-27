@@ -178,7 +178,8 @@ export class AuthService {
     const subdomain = dto.subdomain.trim().toLowerCase();
     const email = dto.email.toLowerCase();
 
-    const institution = await this.institutionsService.findBySubdomain(subdomain);
+    const institution =
+      await this.institutionsService.findBySubdomain(subdomain);
 
     const [record] = await this.db
       .select({
