@@ -39,7 +39,7 @@ async function main() {
   log('Discover (shortcode)', shortcodeDiscover);
 
   const emailDiscover = await request('POST', '/institutions/discover', {
-    query: 'student@institution.ac.ke',
+    query: 'meshackkimaiyo5@gmail.com',
     mode: 'email',
   });
   log('Discover (email)', emailDiscover);
@@ -75,7 +75,7 @@ async function main() {
 
   const initiateOtp = await request('POST', '/auth/login/email/initiate', {
     institutionId,
-    email: 'student@institution.ac.ke',
+    email: 'meshackkimaiyo5@gmail.com',
   });
   log('Email OTP initiate', initiateOtp);
 

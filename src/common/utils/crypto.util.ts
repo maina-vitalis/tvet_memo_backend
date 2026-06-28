@@ -16,7 +16,19 @@ export function generateSessionId(): string {
   return randomUUID();
 }
 
+const MOCK_OTP_CODE = '123456';
+
 export function generateOtp(): string {
+  const configuredMockOtp = process.env.MOCK_OTP_CODE?.trim();
+
+  if (configuredMockOtp) {
+    return configuredMockOtp;
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    return MOCK_OTP_CODE;
+  }
+
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 

@@ -1,25 +1,14 @@
-import {
-  ConflictException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import * as argon2 from 'argon2';
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { extractEmailDomain } from '../../common/utils/email.util';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { accountSetupTokens, institutions, roles, users } from '../../database/schema';
-import { DEFAULT_ROLES } from '../../database/seed/default-roles';
-import {
-  generateTemporaryPassword,
-  sanitizeUser,
-} from '../../common/utils/crypto.util';
+import { accountSetupTokens, institutions } from '../../database/schema';
+
 import {
   DiscoverInstitutionDto,
   DiscoveredInstitutionResponse,
 } from './dto/discover-institution.dto';
-import { ProvisionInstitutionDto } from './dto/provision-institution.dto';
 import { UpdateInstitutionDto } from './dto/institution.dto';
 
 @Injectable()
@@ -77,36 +66,37 @@ export class InstitutionsService {
     const query = dto.query.trim();
 
     if (dto.mode === 'email') {
+      const domain = extractEmailDomain(query);
 
-      const email = query.toLowerCase();
+      if (!domain) {
+        throw new NotFoundException('Institution not found for this email');
+      }
 
-      const [record] = await this.db
+      const [institution] = await this.db
         .select({
           id: institutions.id,
           name: institutions.name,
           schoolCode: institutions.schoolCode,
           subdomain: institutions.subdomain,
         })
-        .from(users)
-        .innerJoin(institutions, eq(users.institutionId, institutions.id))
+        .from(institutions)
         .where(
           and(
-            eq(users.email, email),
-            eq(users.isActive, true),
+            sql`lower(${institutions.subdomain}) = lower(${domain})`,
             eq(institutions.isActive, true),
           ),
         )
         .limit(1);
 
-      if (!record) {
+      if (!institution) {
         throw new NotFoundException('Institution not found for this email');
       }
 
       return {
-        id: record.id,
-        name: record.name,
-        shortcode: record.schoolCode,
-        subdomain: record.subdomain,
+        id: institution.id,
+        name: institution.name,
+        shortcode: institution.schoolCode,
+        subdomain: institution.subdomain,
       };
     }
 

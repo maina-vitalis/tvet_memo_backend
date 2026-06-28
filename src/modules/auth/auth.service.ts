@@ -10,7 +10,6 @@ import * as argon2 from 'argon2';
 import { and, eq, isNull } from 'drizzle-orm';
 import { Request } from 'express';
 import { hasAdminPortalAccess } from '../../common/utils/admin-rights.util';
-import { extractEmailDomain } from '../../common/utils/email.util';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import {
@@ -64,25 +63,18 @@ export class AuthService {
   // Email flow - Step 1: send OTP after institution discovery
   async initiateEmailLogin(dto: InitiateEmailLoginDto) {
     const email = dto.email.toLowerCase();
-    const domain = extractEmailDomain(email);
 
     const [institution] = await this.db
       .select({
         id: institutions.id,
         name: institutions.name,
-        subdomain: institutions.subdomain,
         isActive: institutions.isActive,
       })
       .from(institutions)
       .where(eq(institutions.id, dto.institutionId))
       .limit(1);
 
-    if (
-      !institution ||
-      !institution.isActive ||
-      !domain ||
-      institution.subdomain.toLowerCase() !== domain
-    ) {
+    if (!institution || !institution.isActive) {
       return { message: 'If this email exists, an OTP has been sent' };
     }
 
@@ -127,25 +119,18 @@ export class AuthService {
 
   async checkEmailLogin(dto: CheckEmailLoginDto) {
     const email = dto.email.toLowerCase();
-    const domain = extractEmailDomain(email);
 
     const [institution] = await this.db
       .select({
         id: institutions.id,
-        subdomain: institutions.subdomain,
         isActive: institutions.isActive,
       })
       .from(institutions)
       .where(eq(institutions.id, dto.institutionId))
       .limit(1);
 
-    if (
-      !institution ||
-      !institution.isActive ||
-      !domain ||
-      institution.subdomain.toLowerCase() !== domain
-    ) {
-      return { message: 'If this email exists, you can continue' };
+    if (!institution || !institution.isActive) {
+      return { exists: false, isFirstSetup: false };
     }
 
     const [user] = await this.db
@@ -164,7 +149,7 @@ export class AuthService {
       .limit(1);
 
     if (!user) {
-      return { message: 'If this email exists, you can continue' };
+      return { exists: false, isFirstSetup: false };
     }
 
     const setupPending = await this.institutionsService.hasPendingSetup(
@@ -172,6 +157,7 @@ export class AuthService {
     );
 
     return {
+      exists: true,
       isFirstSetup: user.mustChangePassword || setupPending,
     };
   }
@@ -265,11 +251,7 @@ export class AuthService {
 
   async completeEmailSetup(dto: CompleteEmailSetupDto, req: Request) {
     const email = dto.email.toLowerCase();
-    const otp = await this.findValidEmailOtp(
-      dto.institutionId,
-      email,
-      dto.otp,
-    );
+    const otp = await this.findValidEmailOtp(dto.institutionId, email, dto.otp);
 
     if (!otp) {
       throw new UnauthorizedException('Invalid or expired OTP');
