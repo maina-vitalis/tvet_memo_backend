@@ -12,12 +12,16 @@ import { users } from '../../database/schema';
 import { sanitizeUser } from '../../common/utils/crypto.util';
 import { AuditService } from '../audit/audit.service';
 import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
+import { ProvisionUserDto } from './dto/provision-user.dto';
+import { EmailService } from '../email/email.service';
+import { otps } from '../../database/schema';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAll(institutionId: string) {
@@ -167,5 +171,74 @@ export class UsersService {
     });
 
     return sanitizeUser(updated);
+  }
+
+  async provision(
+    institutionId: string,
+    actorId: string,
+    dto: ProvisionUserDto,
+  ) {
+    const email = dto.email.toLowerCase();
+
+    const [existing] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(eq(users.institutionId, institutionId), eq(users.email, email)),
+      )
+      .limit(1);
+
+    if (existing) {
+      throw new ConflictException(
+        'Email already registered in this institution',
+      );
+    }
+
+    // Generate temporary password (user must change on first login)
+    const tempPassword = Math.random().toString(36).slice(-12);
+    const passwordHash = await argon2.hash(tempPassword, {
+      type: argon2.argon2id,
+    });
+
+    const [user] = await this.db
+      .insert(users)
+      .values({
+        institutionId,
+        roleId: dto.roleId,
+        departmentId: dto.departmentId,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email,
+        staffNumber: dto.staffNumber,
+        phoneNumber: dto.phoneNumber,
+        passwordHash,
+        mustChangePassword: true,
+      })
+      .returning();
+
+    // Generate OTP for email verification
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    await this.db.insert(otps).values({
+      institutionId,
+      email,
+      code,
+      expiresAt,
+    });
+
+    // Send email with login credentials
+    await this.emailService.sendVerificationCode(email, code);
+
+    await this.auditService.log({
+      institutionId,
+      actorId,
+      action: 'user.provision',
+      entityType: 'user',
+      entityId: user.id,
+      afterState: sanitizeUser(user),
+    });
+
+    return sanitizeUser(user);
   }
 }
