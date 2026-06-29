@@ -76,4 +76,63 @@ export class EmailService {
 
     this.logger.log(`Verification email sent to ${to}`);
   }
+
+  async sendAccountSetupLink(
+    to: string,
+    setupLink: string,
+    firstName: string,
+    institutionName?: string,
+  ): Promise<void> {
+    if (!this.client || !this.senderAddress) {
+      this.logger.log(`Account setup link for ${to}: ${setupLink}`);
+      return;
+    }
+
+    const displayName = institutionName ?? 'TVET Memo';
+    const message: EmailMessage = {
+      senderAddress: this.senderAddress,
+      content: {
+        subject: `${displayName} — Complete your account setup`,
+        plainText: [
+          `Hi ${firstName},`,
+          '',
+          `Your account has been created for ${displayName}.`,
+          '',
+          'Complete your account setup by clicking the link below:',
+          setupLink,
+          '',
+          'This link expires in 24 hours.',
+          'If you did not request this, please contact your administrator.',
+        ].join('\n'),
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+            <h2 style="color: #1a365d; margin-bottom: 8px;">Welcome to ${displayName}</h2>
+            <p style="color: #4a5568; margin-top: 0;">Hi ${firstName},</p>
+            <p style="color: #4a5568;">Your account has been created. Complete your account setup to get started:</p>
+            <div style="margin: 32px 0;">
+              <a href="${setupLink}" style="display: inline-block; padding: 12px 24px; background-color: #3182ce; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">Complete Account Setup</a>
+            </div>
+            <p style="color: #718096; font-size: 14px;">Or copy and paste this link into your mobile browser:</p>
+            <p style="color: #3182ce; font-size: 14px; word-break: break-all;">${setupLink}</p>
+            <p style="color: #a0aec0; font-size: 12px; margin-top: 32px;">This link expires in 24 hours. If you did not request this, please contact your administrator.</p>
+          </div>
+        `.trim(),
+      },
+      recipients: {
+        to: [{ address: to }],
+      },
+    };
+
+    const poller = await this.client.beginSend(message);
+    const result = await poller.pollUntilDone();
+
+    if (result.status !== 'Succeeded') {
+      this.logger.error(
+        `Failed to send account setup email to ${to}: ${result.error?.message ?? result.status}`,
+      );
+      throw new Error('Failed to send account setup email');
+    }
+
+    this.logger.log(`Account setup email sent to ${to}`);
+  }
 }

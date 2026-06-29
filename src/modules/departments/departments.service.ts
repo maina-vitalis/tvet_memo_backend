@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
@@ -45,7 +50,28 @@ export class DepartmentsService {
     return department;
   }
 
-  async create(institutionId: string, dto: CreateDepartmentDto) {
+  async create(
+    institutionId: string,
+    actorId: string,
+    dto: CreateDepartmentDto,
+  ) {
+    const existing = await this.db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(
+        and(
+          eq(departments.institutionId, institutionId),
+          eq(departments.name, dto.name),
+        ),
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      throw new ConflictException(
+        'A department with this name already exists in your institution',
+      );
+    }
+
     const [department] = await this.db
       .insert(departments)
       .values({
@@ -55,6 +81,15 @@ export class DepartmentsService {
         headUserId: dto.headUserId,
       })
       .returning();
+
+    await this.auditService.log({
+      institutionId,
+      actorId,
+      action: 'department.create',
+      entityType: 'department',
+      entityId: department.id,
+      afterState: { name: department.name, code: department.code },
+    });
 
     return department;
   }

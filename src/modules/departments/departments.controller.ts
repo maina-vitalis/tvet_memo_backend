@@ -31,7 +31,7 @@ export class DepartmentsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateDepartmentDto,
   ) {
-    return this.departmentsService.create(user.institutionId, dto);
+    return this.departmentsService.create(user.institutionId, user.id, dto);
   }
 
   @Patch(':id')
