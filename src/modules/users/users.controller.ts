@@ -10,6 +10,7 @@ import {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { CreateUserDto, UpdateUserDto } from './dto/user.dto';
+import { ProvisionUserDto } from './dto/provision-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -29,6 +30,14 @@ export class UsersController {
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateUserDto) {
     return this.usersService.create(user.institutionId, user.id, dto);
+  }
+
+  @Post('provision')
+  provision(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ProvisionUserDto,
+  ) {
+    return this.usersService.provision(user.institutionId, user.id, dto);
   }
 
   @Patch(':id')
