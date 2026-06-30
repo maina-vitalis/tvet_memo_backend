@@ -13,6 +13,7 @@ async function bootstrap() {
     'cors.origin',
     'http://localhost:3000',
   );
+
   const allowedOrigins = corsOrigin
     .split(',')
     .map((origin) => origin.trim())
@@ -20,8 +21,12 @@ async function bootstrap() {
   const isDev = configService.get<string>('nodeEnv') === 'development';
 
   app.use(helmet());
+
   app.enableCors({
-    origin: (origin, callback) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow: boolean) => void,
+    ) => {
       if (!origin) {
         callback(null, true);
         return;
