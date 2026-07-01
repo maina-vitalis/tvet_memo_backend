@@ -37,6 +37,7 @@ import { AdminModule } from './modules/admin/admin.module';
     MemosModule,
     SuperAdminAuthModule,
     AdminModule,
+    RolesModule,
   ],
   controllers: [HealthController],
   providers: [

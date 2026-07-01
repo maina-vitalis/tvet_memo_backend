@@ -6,8 +6,8 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import {
   AuthenticatedUser,
   JwtPayload,
-} from '../../common/types/auth-user.type';
-import { SessionService } from './session.service';
+} from '../../../common/types/auth-user.type';
+import { SessionService } from '../session.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

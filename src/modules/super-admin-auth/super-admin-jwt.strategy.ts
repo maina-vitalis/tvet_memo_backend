@@ -3,10 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { and, eq } from 'drizzle-orm';
 import { Request } from 'express';
-import {
-  ExtractJwt,
-  Strategy,
-} from 'passport-jwt';
+import { ExtractJwt, Strategy } from 'passport-jwt';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { superAdmins } from '../../database/schema';
@@ -63,11 +60,7 @@ export class SuperAdminJwtStrategy extends PassportStrategy<
       throw new UnauthorizedException('Invalid super admin token');
     }
 
-    await this.sessionService.assertActive(
-      payload.jti,
-      token,
-      'super_admin',
-    );
+    await this.sessionService.assertActive(payload.jti, token, 'super_admin');
 
     const [superAdmin] = await this.db
       .select({

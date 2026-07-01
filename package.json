@@ -55,6 +55,7 @@
     "class-validator": "^0.15.1",
     "drizzle-orm": "^0.45.2",
     "helmet": "^8.2.0",
+    "ioredis": "^5.11.1",
     "morgan": "^1.11.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

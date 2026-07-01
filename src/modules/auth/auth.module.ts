@@ -7,8 +7,8 @@ import { EmailModule } from '../email/email.module';
 import { InstitutionsModule } from '../institutions/institutions.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { JwtStrategy } from './jwt.strategy';
 import { SessionModule } from './session.module';
+import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
