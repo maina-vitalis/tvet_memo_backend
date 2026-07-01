@@ -97,6 +97,10 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   AZURE_EMAIL_SENDER_ADDRESS?: string;
+
+  @IsString()
+  @IsOptional()
+  REDIS_URL?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

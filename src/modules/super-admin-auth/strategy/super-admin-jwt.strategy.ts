@@ -4,14 +4,14 @@ import { PassportStrategy } from '@nestjs/passport';
 import { and, eq } from 'drizzle-orm';
 import { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { DRIZZLE } from '../../database/database.constants';
-import { DrizzleDB } from '../../database/drizzle';
-import { superAdmins } from '../../database/schema';
+import { DRIZZLE } from '../../../database/database.constants';
+import { DrizzleDB } from '../../../database/drizzle';
+import { superAdmins } from '../../../database/schema';
 import {
   AuthenticatedSuperAdmin,
   SuperAdminJwtPayload,
-} from '../../common/types/super-admin.type';
-import { SessionService } from '../auth/session.service';
+} from '../../../common/types/super-admin.type';
+import { SessionService } from '../../auth/session.service';
 
 function isSuperAdminJwtPayload(
   payload: unknown,
@@ -40,7 +40,7 @@ export class SuperAdminJwtStrategy extends PassportStrategy<
     private readonly sessionService: SessionService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(), //TODO : Change to cookie extraction if needed
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('jwt.secret'),
       passReqToCallback: true,

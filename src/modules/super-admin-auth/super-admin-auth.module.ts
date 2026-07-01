@@ -5,7 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { SessionModule } from '../auth/session.module';
 import { SuperAdminAuthController } from './super-admin-auth.controller';
 import { SuperAdminAuthService } from './super-admin-auth.service';
-import { SuperAdminJwtStrategy } from './super-admin-jwt.strategy';
+import { SuperAdminJwtStrategy } from './strategy/super-admin-jwt.strategy';
 
 @Module({
   imports: [

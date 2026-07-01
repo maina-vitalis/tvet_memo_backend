@@ -18,6 +18,7 @@ import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { SuperAdminAuthModule } from './modules/super-admin-auth/super-admin-auth.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { RedisModule } from './common/redis/redis.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AdminModule } from './modules/admin/admin.module';
     SuperAdminAuthModule,
     AdminModule,
     RolesModule,
+    RedisModule,
   ],
   controllers: [HealthController],
   providers: [
