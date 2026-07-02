@@ -71,11 +71,15 @@ export class SessionService {
       .values(values)
       .returning({ id: sessions.id });
 
-    //add the se to redis for quick access and validation
-    await this.redisService.set(
+    // Store in redis for fast session validation (use same lifetime as DB expiry)
+    const ttlSeconds = Math.max(
+      0,
+      Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+    );
+    await this.redisService.setJson(
       `session:${session.id}`,
-      JSON.stringify({ ...values, isActive: true }),
-      7 * 24 * 60 * 60,
+      { ...values, isActive: true },
+      ttlSeconds || undefined,
     );
 
     return session.id;
@@ -87,21 +91,19 @@ export class SessionService {
     token: string,
     actorType?: SessionActorType,
   ): Promise<void> {
-    const redisSession = (await this.redisService.getJson(
-      `session:${sessionId}`,
-    )) as {
-      isActive: boolean;
-      tokenhash: string;
-      id: string;
-      actorType: string;
-    };
+    const redisSession = await this.redisService.getJson<{
+      isActive?: boolean;
+      tokenHash?: string;
+      actorType?: string;
+      [key: string]: unknown;
+    }>(`session:${sessionId}`);
 
     if (redisSession) {
       if (redisSession.isActive !== true) {
         throw new UnauthorizedException('Session expired or revoked');
       }
 
-      if (redisSession.tokenhash !== hashToken(token)) {
+      if (redisSession.tokenHash !== hashToken(token)) {
         throw new UnauthorizedException('Session expired or revoked');
       }
 
@@ -123,25 +125,53 @@ export class SessionService {
       conditions.push(eq(sessions.actorType, actorType));
     }
 
-    if (!redisSession) {
-      const [session] = await this.db
-        .select({ id: sessions.id })
-        .from(sessions)
-        .where(and(...conditions))
-        .limit(1);
+    const [dbSession] = await this.db
+      .select({
+        id: sessions.id,
+        tokenHash: sessions.tokenHash,
+        actorType: sessions.actorType,
+        isActive: sessions.isActive,
+        expiresAt: sessions.expiresAt,
+      })
+      .from(sessions)
+      .where(and(...conditions))
+      .limit(1);
 
-      if (!session) {
-        throw new UnauthorizedException('Session expired or revoked');
-      }
+    if (!dbSession) {
+      throw new UnauthorizedException('Session expired or revoked');
+    }
+
+    // Populate redis cache on miss so future requests are fast (retain remaining lifetime)
+    const cacheTtl = Math.max(
+      0,
+      Math.floor((dbSession.expiresAt.getTime() - Date.now()) / 1000),
+    );
+    if (cacheTtl > 0) {
+      await this.redisService.setJson(
+        `session:${sessionId}`,
+        dbSession,
+        cacheTtl,
+      );
     }
   }
 
-  //revoke the session
+  //revoke the session (db + redis). Update redis entry and retain its original TTL.
   async revoke(sessionId: string): Promise<void> {
     await this.db
       .update(sessions)
       .set({ isActive: false })
       .where(eq(sessions.id, sessionId));
+
+    // Update redis copy so fast-path checks see revocation immediately.
+    // Retain remaining TTL instead of deleting or resetting it.
+    const key = `session:${sessionId}`;
+    const existing = await this.redisService.getJson<Record<string, any>>(key);
+    if (existing) {
+      const remainingTtl = await this.redisService.ttl(key);
+      const updated = { ...existing, isActive: false };
+      const ttlToUse = remainingTtl > 0 ? remainingTtl : undefined;
+      await this.redisService.setJson(key, updated, ttlToUse);
+    }
   }
 
   private resolveExpiry(expiresIn: string): Date {

@@ -33,7 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Invalid token');
     }
 
-    //TODO: add redis cache to check if the token is revoked or not, for now we will check the session table
+    // Uses redis-cached session (with DB fallback) to verify not revoked/expired
     await this.sessionService.assertActive(payload.jti, token, 'user');
 
     return {
