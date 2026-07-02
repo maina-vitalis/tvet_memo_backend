@@ -452,6 +452,7 @@ export class AuthService {
     };
   }
 
+  //complete the account setup for the admin user after verifying the setup token
   async completeAccountSetup(dto: CompleteAccountSetupDto, req: Request) {
     const record = await this.findValidSetupToken(dto.token);
 
@@ -612,6 +613,7 @@ export class AuthService {
     return record;
   }
 
+  //create session
   private async createSession(
     user: typeof users.$inferSelect,
     institutionId: string,
@@ -626,6 +628,7 @@ export class AuthService {
     const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
     const sessionId = generateSessionId();
 
+    //fix the payload its too big
     const payload: JwtPayload = {
       sub: user.id,
       jti: sessionId,
@@ -640,6 +643,7 @@ export class AuthService {
 
     const accessToken = await this.jwtService.signAsync(payload);
 
+    //create the session
     await this.sessionService.create({
       sessionId,
       actorType: 'user',

@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
 import { ProvisionInstitutionDto } from './dto/provision-institution.dto';
@@ -18,6 +27,7 @@ export class SuperAdminInstitutionsController {
     return this.superAdminInstitutionsService.findAll();
   }
 
+  //provisioning the instittuion and the admin
   @Post('provision')
   provision(@Body() dto: ProvisionInstitutionDto) {
     return this.superAdminInstitutionsService.provision(dto);

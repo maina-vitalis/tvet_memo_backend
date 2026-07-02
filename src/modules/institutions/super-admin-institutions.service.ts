@@ -44,6 +44,7 @@ const RESERVED_SUBDOMAIN_SLUGS = new Set([
   'api',
   'app',
   'mail',
+  'info',
 ]);
 
 @Injectable()
@@ -54,17 +55,20 @@ export class SuperAdminInstitutionsService {
     private readonly mailService: MailService,
   ) {}
 
+  //provisioning the instittuion and the admin
   async provision(dto: ProvisionInstitutionDto) {
     const adminEmail = dto.adminEmail;
     const schoolCode = dto.shortcode;
     const subdomain = dto.subdomainSlug;
 
+    //reserved domains
     if (isReservedInstitutionDomain(subdomain)) {
       throw new BadRequestException(
         'This subdomain is reserved. Choose a different domain.',
       );
     }
 
+    //check if the domain and code are unique
     await this.assertUniqueInstitutionIdentifiers(subdomain, schoolCode);
 
     const passwordHash = await getLockedPasswordHash();
@@ -75,9 +79,11 @@ export class SuperAdminInstitutionsService {
       72,
     );
     const expiresAt = new Date(Date.now() + expiryHours * 60 * 60 * 1000);
+
     const subscriptionEndsAt = new Date(
       Date.now() + dto.subscriptionDays * 24 * 60 * 60 * 1000,
     );
+
     const { firstName, lastName } = splitAdminFullName(dto.adminFullName);
     const isActive = dto.initialStatus !== 'pending';
 
@@ -98,6 +104,7 @@ export class SuperAdminInstitutionsService {
         })
         .returning();
 
+      //update the roles table and add permissions table
       const insertedRoles = await tx
         .insert(roles)
         .values(
@@ -108,6 +115,7 @@ export class SuperAdminInstitutionsService {
         )
         .returning();
 
+      //checking if institution admin exists in the database before onboarding
       const institutionalAdminRole = insertedRoles.find(
         (role) => role.name === 'Institutional Admin',
       );
@@ -131,6 +139,7 @@ export class SuperAdminInstitutionsService {
         })
         .returning();
 
+      // replace with redis for better performance and scalability in the future
       await tx.insert(accountSetupTokens).values({
         institutionId: institution.id,
         userId: rootUser.id,
@@ -164,6 +173,7 @@ export class SuperAdminInstitutionsService {
     };
   }
 
+  //get all institutions in the system for super admin
   async findAll() {
     return this.db
       .select()
@@ -171,6 +181,7 @@ export class SuperAdminInstitutionsService {
       .orderBy(desc(institutions.createdAt));
   }
 
+  //update institution details for super admin
   async update(id: string, dto: UpdateInstitutionDto) {
     const [existing] = await this.db
       .select()
@@ -194,6 +205,7 @@ export class SuperAdminInstitutionsService {
     return updated;
   }
 
+  //remove institution and all its related data for super admin
   async remove(id: string) {
     const [existing] = await this.db
       .select()
@@ -264,6 +276,7 @@ export class SuperAdminInstitutionsService {
     return { success: true, message: 'Institution deleted successfully' };
   }
 
+  //checking if the school domain and code are unique
   private async assertUniqueInstitutionIdentifiers(
     subdomain: string,
     schoolCode: string,

@@ -31,13 +31,14 @@ export class AuthController {
     return this.authService.adminLogin(dto, req);
   }
 
-  //
+  //veify the setup token sent to the admin email during institution provisioning
   @Public()
   @Post('setup/verify')
   verifySetupToken(@Body() dto: VerifySetupTokenDto) {
     return this.authService.verifySetupToken(dto);
   }
 
+  //complete the account setup for the admin after verifying the setup token
   @Public()
   @Post('setup/complete')
   completeAccountSetup(
