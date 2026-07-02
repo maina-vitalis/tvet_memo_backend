@@ -5,6 +5,7 @@ import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { sessions } from '../../database/schema';
 import { hashToken } from '../../common/utils/crypto.util';
+import { RedisService } from '../../common/redis/redis.service';
 
 type SessionActorType = 'user' | 'super_admin';
 
@@ -32,8 +33,10 @@ export class SessionService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly configService: ConfigService,
+    private readonly redisService: RedisService,
   ) {}
 
+  //create a session and return the session id
   async create(input: CreateSessionInput): Promise<string> {
     const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
     const expiresAt = this.resolveExpiry(expiresIn);
@@ -55,7 +58,7 @@ export class SessionService {
             id: input.sessionId,
             actorType: 'super_admin' as const,
             superAdminId: input.superAdminId,
-            tokenHash: hashToken(input.token),
+            tokenHash: hashToken(input.token), //acess token is hashed for security
             deviceName: input.deviceName,
             deviceType: input.deviceType,
             ipAddress: input.ipAddress,
@@ -68,38 +71,72 @@ export class SessionService {
       .values(values)
       .returning({ id: sessions.id });
 
+    //add the se to redis for quick access and validation
+    await this.redisService.set(
+      `session:${session.id}`,
+      JSON.stringify({ ...values, isActive: true }),
+      7 * 24 * 60 * 60,
+    );
+
     return session.id;
   }
 
+  //assert that a session is active and valid
   async assertActive(
     sessionId: string,
     token: string,
     actorType?: SessionActorType,
   ): Promise<void> {
-    const now = new Date();
+    const redisSession = (await this.redisService.getJson(
+      `session:${sessionId}`,
+    )) as {
+      isActive: boolean;
+      tokenhash: string;
+      id: string;
+      actorType: string;
+    };
+
+    if (redisSession) {
+      if (redisSession.isActive !== true) {
+        throw new UnauthorizedException('Session expired or revoked');
+      }
+
+      if (redisSession.tokenhash !== hashToken(token)) {
+        throw new UnauthorizedException('Session expired or revoked');
+      }
+
+      if (redisSession.actorType && redisSession.actorType !== actorType) {
+        throw new UnauthorizedException('Session expired or revoked');
+      }
+
+      return;
+    }
 
     const conditions = [
       eq(sessions.id, sessionId),
       eq(sessions.tokenHash, hashToken(token)),
       eq(sessions.isActive, true),
-      gt(sessions.expiresAt, now),
+      gt(sessions.expiresAt, new Date()),
     ];
 
     if (actorType) {
       conditions.push(eq(sessions.actorType, actorType));
     }
 
-    const [session] = await this.db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(and(...conditions))
-      .limit(1);
+    if (!redisSession) {
+      const [session] = await this.db
+        .select({ id: sessions.id })
+        .from(sessions)
+        .where(and(...conditions))
+        .limit(1);
 
-    if (!session) {
-      throw new UnauthorizedException('Session expired or revoked');
+      if (!session) {
+        throw new UnauthorizedException('Session expired or revoked');
+      }
     }
   }
 
+  //revoke the session
   async revoke(sessionId: string): Promise<void> {
     await this.db
       .update(sessions)

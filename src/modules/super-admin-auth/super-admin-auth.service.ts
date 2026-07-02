@@ -44,6 +44,7 @@ export class SuperAdminAuthService {
       superAdmin.passwordHash,
       dto.password,
     );
+
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }

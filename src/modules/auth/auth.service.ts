@@ -369,6 +369,7 @@ export class AuthService {
     return this.createSession(user, dto.institutionId, dto, req);
   }
 
+  //tenant admin login
   async adminLogin(dto: AdminLoginDto, req: Request) {
     const subdomain = dto.subdomain.trim().toLowerCase();
     const email = dto.email.toLowerCase();

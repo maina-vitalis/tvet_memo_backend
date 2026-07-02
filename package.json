@@ -34,12 +34,6 @@
     "seed": "pnpm db:seed",
     "seed:super-admin": "tsx src/database/seed/super-admin.ts"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "argon2",
-      "esbuild"
-    ]
-  },
   "dependencies": {
     "@azure/communication-email": "^1.1.0",
     "@nestjs/common": "^11.0.1",

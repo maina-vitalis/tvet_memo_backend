@@ -60,6 +60,7 @@ export class SuperAdminJwtStrategy extends PassportStrategy<
       throw new UnauthorizedException('Invalid super admin token');
     }
 
+    //check if the session is active
     await this.sessionService.assertActive(payload.jti, token, 'super_admin');
 
     const [superAdmin] = await this.db

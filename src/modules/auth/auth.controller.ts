@@ -31,6 +31,7 @@ export class AuthController {
     return this.authService.adminLogin(dto, req);
   }
 
+  //
   @Public()
   @Post('setup/verify')
   verifySetupToken(@Body() dto: VerifySetupTokenDto) {

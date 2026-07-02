@@ -2,3 +2,7 @@ allowBuilds:
   argon2: true
   esbuild: true
   unrs-resolver: true
+
+onlyBuiltDependencies:
+  - '@swc/core'
+  - 'esbuild'
