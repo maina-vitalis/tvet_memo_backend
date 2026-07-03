@@ -25,13 +25,11 @@
     "db:check": "drizzle-kit check",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/database/seed/index.ts",
-    "db:seed:demo": "tsx src/database/seed/index.ts",
     "db:setup": "pnpm db:migrate && pnpm db:seed",
     "db:reset": "node scripts/reset-db.mjs",
     "db:fresh": "node scripts/reset-db.mjs && pnpm db:migrate && pnpm db:seed",
     "db:seed-auth": "node scripts/seed-auth-test.mjs",
     "test:auth": "node scripts/test-auth-endpoints.mjs",
-    "seed": "pnpm db:seed",
     "seed:super-admin": "tsx src/database/seed/super-admin.ts"
   },
   "dependencies": {
