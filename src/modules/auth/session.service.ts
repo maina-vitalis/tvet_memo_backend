@@ -215,9 +215,7 @@ export class SessionService {
    *
    * Returns the data the caller needs to build a new JWT + the new refresh token.
    */
-  async rotateAndIssueNewAccess(
-    input: RefreshTokenInput,
-  ): Promise<{
+  async rotateAndIssueNewAccess(input: RefreshTokenInput): Promise<{
     session: Session;
     newSessionId: string;
     newAccessTokenPayloadBase: {
@@ -613,7 +611,11 @@ export class SessionService {
       0,
       Math.floor((expiresAt.getTime() - Date.now()) / 1000),
     );
-    await this.redisService.setJson(`session:${row.id}`, values, ttl || undefined);
+    await this.redisService.setJson(
+      `session:${row.id}`,
+      values,
+      ttl || undefined,
+    );
 
     return row.id;
   }
