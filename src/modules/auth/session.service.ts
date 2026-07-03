@@ -299,8 +299,8 @@ export class SessionService {
       .where(eq(sessions.id, session.id));
 
     // Invalidate old Redis keys
-    await this.redisService.delete(`refresh:${refreshHash}`);
-    await this.redisService.delete(`session:${session.id}`);
+    await this.redisService.del(`refresh:${refreshHash}`);
+    await this.redisService.del(`session:${session.id}`);
 
     // Pre-cache the new refresh mapping
     const newRefreshTtl = Math.max(
@@ -357,7 +357,7 @@ export class SessionService {
       .where(eq(sessions.id, params.sessionId));
 
     // Refresh Redis cache
-    await this.redisService.delete(`session:${params.sessionId}`);
+    await this.redisService.del(`session:${params.sessionId}`);
 
     const ttl = Math.max(
       0,
@@ -455,7 +455,7 @@ export class SessionService {
       .set({ isActive: false })
       .where(eq(sessions.id, sessionId));
 
-    await this.redisService.delete(`session:${sessionId}`);
+    await this.redisService.del(`session:${sessionId}`);
     // Note: the specific refresh hash will be orphaned naturally when it expires.
     // For immediate invalidation we could store revoked hashes briefly, but rotation already helps.
   }
@@ -475,7 +475,7 @@ export class SessionService {
 
     if (session) {
       await this.revoke(session.id);
-      await this.redisService.delete(`refresh:${refreshHash}`);
+      await this.redisService.del(`refresh:${refreshHash}`);
     }
   }
 
@@ -531,7 +531,7 @@ export class SessionService {
 
     // Best effort Redis cleanup
     for (const row of result) {
-      await this.redisService.delete(`session:${row.id}`);
+      await this.redisService.del(`session:${row.id}`);
     }
     return result.length;
   }
