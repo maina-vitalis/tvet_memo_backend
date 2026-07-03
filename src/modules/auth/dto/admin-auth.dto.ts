@@ -25,6 +25,13 @@ export class AdminLoginDto {
   @IsString()
   @IsOptional()
   deviceType?: string;
+
+  /**
+   * [REFRESH TOKENS] Recommended: pass stable deviceId from client.
+   */
+  @IsString()
+  @IsOptional()
+  deviceId?: string;
 }
 
 export class VerifySetupTokenDto {
@@ -49,4 +56,8 @@ export class CompleteAccountSetupDto {
   @IsString()
   @IsOptional()
   deviceType?: string;
+
+  @IsString()
+  @IsOptional()
+  deviceId?: string;
 }

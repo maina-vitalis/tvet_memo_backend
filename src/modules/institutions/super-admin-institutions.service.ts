@@ -23,6 +23,8 @@ import {
   auditLogs,
   memos,
   departments,
+  permissions,
+  rolePermissions,
 } from '../../database/schema';
 import { DEFAULT_ROLES } from '../../database/seed/default-roles';
 import {
@@ -104,7 +106,9 @@ export class SuperAdminInstitutionsService {
         })
         .returning();
 
-      //update the roles table and add permissions table
+      // ====================================================================
+      // RBAC: Insert roles + assign permissions from the global registry
+      // ====================================================================
       const insertedRoles = await tx
         .insert(roles)
         .values(
@@ -114,6 +118,100 @@ export class SuperAdminInstitutionsService {
           })),
         )
         .returning();
+
+      // Load all permissions (they are global)
+      const allPerms = await tx.select().from(permissions);
+
+      const permMap = new Map(allPerms.map((p) => [p.key, p.id]));
+
+      // Define sensible default permission grants per role name
+      // This is the foundation for proper RBAC instead of unstructured JSONB
+      const rolePermissionAssignments: Record<string, string[]> = {
+        'Board of Governors': [
+          'tenant.memos.send',
+          'tenant.memos.send.broadcast',
+          'tenant.memos.send.target_department',
+          'tenant.memos.send.target_role',
+          'tenant.memos.send.target_individual',
+          'tenant.memos.view.all',
+          'tenant.users.view',
+          'tenant.institution.settings',
+          'tenant.institution.reports',
+        ],
+        'Institutional Admin': [
+          'tenant.memos.send',
+          'tenant.memos.send.broadcast',
+          'tenant.memos.send.target_department',
+          'tenant.memos.send.target_role',
+          'tenant.memos.send.target_individual',
+          'tenant.memos.view.all',
+          'tenant.users.create',
+          'tenant.users.manage',
+          'tenant.users.view',
+          'tenant.users.assign_roles',
+          'tenant.roles.manage',
+          'tenant.roles.assign',
+          'tenant.departments.manage',
+          'tenant.institution.settings',
+          'tenant.institution.reports',
+        ],
+        Principal: [
+          'tenant.memos.send',
+          'tenant.memos.send.broadcast',
+          'tenant.memos.send.target_department',
+          'tenant.memos.send.target_role',
+          'tenant.memos.send.target_individual',
+          'tenant.memos.view.all',
+          'tenant.users.manage',
+          'tenant.users.view',
+          'tenant.users.assign_roles',
+          'tenant.institution.reports',
+        ],
+        'Deputy Principal': [
+          'tenant.memos.send',
+          'tenant.memos.send.broadcast',
+          'tenant.memos.send.target_department',
+          'tenant.memos.send.target_role',
+          'tenant.memos.send.target_individual',
+          'tenant.memos.view.all',
+          'tenant.users.view',
+        ],
+        'Head of Department': [
+          'tenant.memos.send',
+          'tenant.memos.send.target_role',
+          'tenant.memos.send.target_individual',
+          'tenant.memos.view.department',
+          'tenant.users.view',
+        ],
+        Trainer: [
+          'tenant.memos.send',
+          'tenant.memos.send.target_individual',
+          'tenant.memos.view.department',
+        ],
+        'Support Staff': [
+          'tenant.memos.view.own',
+        ],
+        Trainee: [
+          'tenant.memos.view.own',
+        ],
+      };
+
+      // Insert role_permissions for each role
+      for (const role of insertedRoles) {
+        const keys = rolePermissionAssignments[role.name] || [];
+        const permIds = keys
+          .map((k) => permMap.get(k))
+          .filter((id): id is string => !!id);
+
+        if (permIds.length > 0) {
+          await tx.insert(rolePermissions).values(
+            permIds.map((pid) => ({
+              roleId: role.id,
+              permissionId: pid,
+            })),
+          );
+        }
+      }
 
       //checking if institution admin exists in the database before onboarding
       const institutionalAdminRole = insertedRoles.find(

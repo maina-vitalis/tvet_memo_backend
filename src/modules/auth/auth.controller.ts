@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -16,6 +16,7 @@ import {
   EmailLoginDto,
   EmailPasswordLoginDto,
   InitiateEmailLoginDto,
+  RefreshTokenDto,
   RegistryLoginDto,
   ValidateEmailOtpDto,
 } from './dto/login.dto';
@@ -93,11 +94,6 @@ export class AuthController {
     return this.authService.registryLogin(dto, req);
   }
 
-  @Post('logout')
-  logout(@CurrentUser() user: AuthenticatedUser, @Req() req: Request) {
-    return this.authService.logout(user, req);
-  }
-
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.getProfile(user.id, user.institutionId);
@@ -116,5 +112,62 @@ export class AuthController {
       dto.newPassword,
       req,
     );
+  }
+
+  // ========================================================================
+  // [REFRESH TOKENS + SESSIONS] Device & Session Management
+  // ========================================================================
+
+  /**
+   * [SIGN OUT ALL + ACTIVE SESSIONS]
+   * Returns lightweight list of active sessions for the current authenticated user.
+   * Useful for "Where you're logged in" UI. Marks the current session.
+   */
+  @Get('sessions')
+  getActiveSessions(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getActiveSessions(user);
+  }
+
+  /**
+   * [SIGN OUT ALL + ACTIVE SESSIONS]
+   * Revokes ALL active sessions for the current user (including this one).
+   * Client should clear local tokens after calling.
+   */
+  @Post('logout-all')
+  logoutAll(@CurrentUser() user: AuthenticatedUser, @Req() req: Request) {
+    return this.authService.logoutAll(user, req);
+  }
+
+  /**
+   * Revoke a specific session by its ID (one device).
+   * User can only revoke their own sessions.
+   */
+  @Post('sessions/:id/logout')
+  logoutSession(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') sessionId: string,
+    @Req() req: Request,
+  ) {
+    return this.authService.logoutSpecificSession(user, sessionId, req);
+  }
+
+  /**
+   * Standard logout for current device.
+   * Supports optional refreshToken in body for cases where access is already invalid.
+   */
+  @Post('logout')
+  logout(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Body() body: { refreshToken?: string } = {},
+    @Req() req: Request,
+  ) {
+    return this.authService.logout(user, req, body.refreshToken);
+  }
+
+  // [REFRESH TOKENS] kept as-is
+  @Public()
+  @Post('refresh')
+  async refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
+    return this.authService.refreshTokens(dto.refreshToken, req);
   }
 }

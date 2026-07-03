@@ -1,14 +1,20 @@
 import {
+  IsArray,
   IsInt,
   IsNotEmpty,
-  IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 
+/**
+ * [RBAC PERMISSIONS TABLE]
+ * We are moving away from unstructured JSONB toward explicit permissions.
+ * During transition we still accept the old fields for backward compatibility.
+ */
 export class CreateRoleDto {
   @IsString()
   @IsNotEmpty()
@@ -20,15 +26,27 @@ export class CreateRoleDto {
   @Max(8)
   hierarchyLevel!: number;
 
-  @IsObject()
+  /**
+   * List of permission keys or IDs to grant to this role.
+   * Preferred way going forward.
+   */
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  permissionKeys?: string[];
+
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  @IsOptional()
+  permissionIds?: string[];
+
+  // Legacy fields kept for transition period
   @IsOptional()
   sendScope?: Record<string, unknown>;
 
-  @IsObject()
   @IsOptional()
   contentAccess?: Record<string, unknown>;
 
-  @IsObject()
   @IsOptional()
   adminRights?: Record<string, unknown>;
 }
@@ -45,15 +63,22 @@ export class UpdateRoleDto {
   @IsOptional()
   hierarchyLevel?: number;
 
-  @IsObject()
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  permissionKeys?: string[];
+
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  @IsOptional()
+  permissionIds?: string[];
+
   @IsOptional()
   sendScope?: Record<string, unknown>;
 
-  @IsObject()
   @IsOptional()
   contentAccess?: Record<string, unknown>;
 
-  @IsObject()
   @IsOptional()
   adminRights?: Record<string, unknown>;
 }

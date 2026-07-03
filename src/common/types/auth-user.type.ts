@@ -8,6 +8,8 @@ export interface JwtPayload {
   firstName: string;
   lastName: string;
   mustChangePassword: boolean;
+  // Future: we can embed permission keys if payload size allows
+  // permissions?: string[];
 }
 
 export interface AuthenticatedUser {
@@ -20,4 +22,6 @@ export interface AuthenticatedUser {
   firstName: string;
   lastName: string;
   mustChangePassword: boolean;
+  // Populated by RBAC layer
+  permissions?: string[];
 }

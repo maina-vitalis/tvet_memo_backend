@@ -11,6 +11,9 @@ import { attachments } from './attachments';
 import { notifications } from './notifications';
 import { messageThreads } from './message-threads';
 import { auditLogs } from './audit-logs';
+import { permissions } from './permissions';
+import { rolePermissions } from './role-permissions';
+import { superAdminPermissions } from './super-admin-permissions';
 
 export const institutionsRelations = relations(institutions, ({ many }) => ({
   roles: many(roles),
@@ -28,6 +31,34 @@ export const rolesRelations = relations(roles, ({ one, many }) => ({
     references: [institutions.id],
   }),
   users: many(users),
+  permissions: many(rolePermissions),
+}));
+
+export const permissionsRelations = relations(permissions, ({ many }) => ({
+  rolePermissions: many(rolePermissions),
+  superAdminPermissions: many(superAdminPermissions),
+}));
+
+export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
+  role: one(roles, {
+    fields: [rolePermissions.roleId],
+    references: [roles.id],
+  }),
+  permission: one(permissions, {
+    fields: [rolePermissions.permissionId],
+    references: [permissions.id],
+  }),
+}));
+
+export const superAdminPermissionsRelations = relations(superAdminPermissions, ({ one }) => ({
+  superAdmin: one(superAdmins, {
+    fields: [superAdminPermissions.superAdminId],
+    references: [superAdmins.id],
+  }),
+  permission: one(permissions, {
+    fields: [superAdminPermissions.permissionId],
+    references: [permissions.id],
+  }),
 }));
 
 export const departmentsRelations = relations(departments, ({ one, many }) => ({

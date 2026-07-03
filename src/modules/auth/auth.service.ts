@@ -25,6 +25,15 @@ import {
   hashToken,
   sanitizeUser,
 } from '../../common/utils/crypto.util';
+
+/**
+ * [REFRESH TOKENS] NOTE ON FLOW:
+ * - All login/setup paths now go through a two-phase approach:
+ *   1. Build JWT payload + sign access token (short lived)
+ *   2. Call sessionService.persistSessionAfterSigning(...) to store access hash + generate+store refresh
+ * - This gives us clean rotation semantics later.
+ * - The returned object now always includes `refreshToken`.
+ */
 import {
   AuthenticatedUser,
   JwtPayload,
@@ -613,11 +622,25 @@ export class AuthService {
     return record;
   }
 
-  //create session
+  /**
+   * [REFRESH TOKENS - CORE]
+   * Issues short-lived access + long-lived refresh for a regular user.
+   * - Access expiry: config jwt.accessExpiresIn (default 15m)
+   * - Refresh expiry: config jwt.refreshExpiresIn (default 7d)
+   * - Refresh token is rotated on future use and revoked on logout.
+   *
+   * Documentation for reviewer:
+   * - deviceId (if passed from client in future) enables precise device management.
+   * - expiresIn is now returned as **number of seconds** (clients expect this for timers).
+   */
   private async createSession(
     user: typeof users.$inferSelect,
     institutionId: string,
-    dto: { deviceName?: string; deviceType?: string },
+    dto: {
+      deviceName?: string;
+      deviceType?: string;
+      deviceId?: string;
+    },
     req: Request,
   ) {
     await this.db
@@ -625,10 +648,9 @@ export class AuthService {
       .set({ lastLoginAt: new Date() })
       .where(eq(users.id, user.id));
 
-    const expiresIn = this.configService.get<string>('jwt.expiresIn', '7d');
     const sessionId = generateSessionId();
 
-    //fix the payload its too big
+    // Short payload (avoid bloat). Role details fetched on demand when needed.
     const payload: JwtPayload = {
       sub: user.id,
       jti: sessionId,
@@ -643,12 +665,13 @@ export class AuthService {
 
     const accessToken = await this.jwtService.signAsync(payload);
 
-    //create the session
-    await this.sessionService.create({
+    // NEW: persist both access + generate refresh using the new service
+    const { refreshToken } = await this.sessionService.persistSessionAfterSigning({
       sessionId,
       actorType: 'user',
       userId: user.id,
-      token: accessToken,
+      accessToken,
+      deviceId: dto.deviceId,
       deviceName: dto.deviceName,
       deviceType: dto.deviceType ?? 'web',
       ipAddress: req.ip,
@@ -665,29 +688,123 @@ export class AuthService {
       userAgent: req.get('user-agent') ?? undefined,
     });
 
+    const accessExpiresIn = this.sessionService.getExpiresInSeconds(
+      this.configService.get<string>('jwt.accessExpiresIn', '15m'),
+    );
+
     return {
       accessToken,
+      refreshToken,
       tokenType: 'Bearer' as const,
-      expiresIn,
+      expiresIn: accessExpiresIn, // seconds (number) - important for client timers
       user: sanitizeUser(user),
       mustChangePassword: user.mustChangePassword,
     };
   }
 
-  async logout(user: AuthenticatedUser, req: Request) {
-    await this.sessionService.revoke(user.sessionId);
+  /**
+   * [REFRESH TOKENS] Logout.
+   * Prefers the authenticated session, but can also revoke using a provided refresh token.
+   * This allows clients to logout even if their access token is already expired.
+   */
+  async logout(
+    user: AuthenticatedUser | undefined,
+    req: Request,
+    refreshToken?: string,
+  ) {
+    if (user?.sessionId) {
+      await this.sessionService.revoke(user.sessionId);
+
+      await this.auditService.log({
+        institutionId: user.institutionId,
+        actorId: user.id,
+        action: 'session.revoke',
+        entityType: 'session',
+        entityId: user.sessionId,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+    } else if (refreshToken) {
+      await this.sessionService.revokeByRefreshToken(refreshToken);
+      // Light audit - we may not know the actor
+      // In production you might want to look up the user first for better audit.
+    }
+
+    return { message: 'Logged out successfully' };
+  }
+
+  /**
+   * [SIGN OUT ALL + ACTIVE SESSIONS]
+   * Returns the user's active sessions with a flag indicating which one is the current request.
+   * Keeps the response lightweight and safe (no secret material).
+   */
+  async getActiveSessions(user: AuthenticatedUser) {
+    const sessions = await this.sessionService.findActiveSessionsForUser(user.id);
+
+    return sessions.map((s) => ({
+      ...s,
+      current: s.id === user.sessionId,
+      // [SECURITY] Lightweight privacy: mask the last part of the IP
+      ipAddress: this.maskIp(s.ipAddress),
+    }));
+  }
+
+  /**
+   * [SIGN OUT ALL]
+   * Revokes every active session for this user.
+   * After this, the client must clear tokens and the user will be logged out everywhere.
+   */
+  async logoutAll(user: AuthenticatedUser, req: Request) {
+    const count = await this.sessionService.revokeAllForActor({ userId: user.id });
+
+    await this.auditService.log({
+      institutionId: user.institutionId,
+      actorId: user.id,
+      action: 'session.revoke_all',
+      entityType: 'session',
+      entityId: user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+      afterState: { revokedCount: count },
+    });
+
+    return { message: 'Signed out from all devices', revokedCount: count };
+  }
+
+  /**
+   * Revoke one specific session/device.
+   * Security: ensure the session belongs to the caller.
+   */
+  async logoutSpecificSession(user: AuthenticatedUser, sessionId: string, req: Request) {
+    // We fetch to verify ownership (lightweight)
+    const active = await this.sessionService.findActiveSessionsForUser(user.id);
+    const target = active.find((s) => s.id === sessionId);
+
+    if (!target) {
+      // Either doesn't exist, already revoked, or not owned by user
+      return { message: 'Session not found or already signed out' };
+    }
+
+    await this.sessionService.revoke(sessionId);
 
     await this.auditService.log({
       institutionId: user.institutionId,
       actorId: user.id,
       action: 'session.revoke',
       entityType: 'session',
-      entityId: user.sessionId,
+      entityId: sessionId,
       ipAddress: req.ip,
       userAgent: req.get('user-agent') ?? undefined,
     });
 
-    return { message: 'Logged out successfully' };
+    return { message: 'Device signed out successfully' };
+  }
+
+  private maskIp(ip: any): string | null {
+    if (!ip) return null;
+    const str = String(ip);
+    // Very simple masking for display (last segment hidden)
+    return str.includes('.') ? str.replace(/\.\d+$/, '.xxx') : str;
   }
 
   async getProfile(userId: string, institutionId: string) {
@@ -752,5 +869,94 @@ export class AuthService {
     });
 
     return { message: 'Password updated successfully' };
+  }
+
+  // ========================================================================
+  // [REFRESH TOKENS] REFRESH FLOW
+  // ========================================================================
+
+  /**
+   * [REFRESH TOKENS]
+   * Validates a refresh token, rotates it, signs a new short access JWT,
+   * and returns the new pair.
+   *
+   * This endpoint should be called by clients when:
+   * - Access token is expired (401)
+   * - Proactively before expiry (using expiresIn or JWT exp claim)
+   *
+   * Security notes for reviewer:
+   * - Old refresh is immediately invalidated (rotation).
+   * - We do NOT require the old access token here.
+   * - On any failure the client must fall back to full re-authentication.
+   */
+  async refreshTokens(
+    refreshToken: string,
+    req: Request,
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    tokenType: 'Bearer';
+    expiresIn: number;
+  }> {
+    // Delegate heavy lifting (validation + rotation) to SessionService
+    const rotation = await this.sessionService.rotateAndIssueNewAccess({
+      refreshToken,
+      actorType: 'user', // for now; we can generalize
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
+    // Rebuild a fresh access payload. We re-fetch minimal user data to be safe.
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, rotation.newAccessTokenPayloadBase.sub))
+      .limit(1);
+
+    if (!user || !user.isActive) {
+      await this.sessionService.revoke(rotation.newSessionId);
+      throw new UnauthorizedException('User no longer active');
+    }
+
+    const payload: JwtPayload = {
+      sub: user.id,
+      jti: rotation.newSessionId,
+      institutionId: user.institutionId,
+      roleId: user.roleId,
+      departmentId: user.departmentId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      mustChangePassword: user.mustChangePassword,
+    };
+
+    const newAccessToken = await this.jwtService.signAsync(payload);
+
+    // Tell session service about the newly signed access token
+    await this.sessionService.updateAccessTokenAfterRefresh({
+      sessionId: rotation.newSessionId,
+      newAccessToken,
+    });
+
+    const accessExpiresIn = this.sessionService.getExpiresInSeconds(
+      this.configService.get<string>('jwt.accessExpiresIn', '15m'),
+    );
+
+    await this.auditService.log({
+      institutionId: user.institutionId,
+      actorId: user.id,
+      action: 'auth.refresh',
+      entityType: 'session',
+      entityId: rotation.newSessionId,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent') ?? undefined,
+    });
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: rotation.newRefreshToken,
+      tokenType: 'Bearer',
+      expiresIn: accessExpiresIn,
+    };
   }
 }

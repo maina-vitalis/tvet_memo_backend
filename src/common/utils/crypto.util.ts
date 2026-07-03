@@ -4,6 +4,10 @@ import * as argon2 from 'argon2';
 
 const LOCKED_PASSWORD_SENTINEL = '__ACCOUNT_SETUP_PENDING__';
 
+/**
+ * [REFRESH TOKENS] One-way hash used for BOTH access token hashes and refresh token hashes.
+ * Never store plaintext tokens in DB. SHA-256 is sufficient here (tokens are high entropy).
+ */
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
@@ -13,6 +17,24 @@ export function generateSetupToken(): string {
 }
 
 export function generateSessionId(): string {
+  return randomUUID();
+}
+
+/**
+ * [REFRESH TOKENS] Generates a cryptographically strong opaque refresh token.
+ * Using randomUUID for simplicity + high entropy. In production you could use 32+ random bytes.
+ * This value is ONLY returned to the client once; server only ever sees/stores the hash.
+ */
+export function generateRefreshToken(): string {
+  return randomUUID() + '-' + randomBytes(16).toString('hex');
+}
+
+/**
+ * [REFRESH TOKENS] Convenience: generate a stable device identifier on the client side.
+ * Recommended usage (clients): generate once per install/device and persist in secure storage.
+ * Send as `deviceId` on login/refresh for better session visibility and targeted revocation.
+ */
+export function generateDeviceId(): string {
   return randomUUID();
 }
 

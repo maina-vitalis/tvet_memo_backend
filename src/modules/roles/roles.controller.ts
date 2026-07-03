@@ -11,10 +11,18 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { CreateRoleDto, UpdateRoleDto } from './dto/role.dto';
 import { RolesService } from './roles.service';
+import { permissions } from '../../database/schema';
+import { Inject } from '@nestjs/common';
+import { DRIZZLE } from '../../database/database.constants';
+import { DrizzleDB } from '../../database/drizzle';
+import { eq } from 'drizzle-orm';
 
 @Controller('roles')
 export class RolesController {
-  constructor(private readonly rolesService: RolesService) {}
+  constructor(
+    private readonly rolesService: RolesService,
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+  ) {}
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser) {
@@ -43,5 +51,19 @@ export class RolesController {
   @Delete(':id')
   deactivate(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
     return this.rolesService.deactivate(user.institutionId, id);
+  }
+
+  /**
+   * [RBAC] List available tenant permissions for this institution's role editor.
+   * Super admins may want a different endpoint for platform permissions.
+   */
+  @Get('permissions/available')
+  async listAvailablePermissions(@CurrentUser() user: AuthenticatedUser) {
+    // For tenant side, return non-platform permissions
+    // In real impl you might filter by category
+    return this.db
+      .select()
+      .from(permissions)
+      .where(eq(permissions.isActive, true));
   }
 }

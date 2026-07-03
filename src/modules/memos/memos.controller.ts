@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import {
   AcknowledgeMemoDto,
@@ -28,6 +30,7 @@ export class MemosController {
     return this.memosService.findOne(user.institutionId, id);
   }
 
+  // Creating a memo draft is relatively open
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateMemoDto) {
     return this.memosService.create(user.institutionId, user.id, dto);
@@ -42,6 +45,9 @@ export class MemosController {
     return this.memosService.update(user.institutionId, user.id, id, dto);
   }
 
+  // Sending requires explicit permission
+  @UseGuards(PermissionsGuard)
+  @RequirePermission('tenant.memos.send')
   @Post(':id/send')
   send(
     @CurrentUser() user: AuthenticatedUser,

@@ -12,6 +12,11 @@ import {
   generateSessionId,
   sanitizeUser,
 } from '../../common/utils/crypto.util';
+
+/**
+ * [REFRESH TOKENS] Super admin path also now issues refresh tokens.
+ * We keep the same patterns for simplicity and consistent client code.
+ */
 import { SessionService } from '../auth/session.service';
 import { SuperAdminLoginDto } from './dto/super-admin-login.dto';
 
@@ -66,20 +71,29 @@ export class SuperAdminAuthService {
 
     const accessToken = await this.jwtService.signAsync(payload);
 
-    await this.sessionService.create({
-      sessionId,
-      actorType: 'super_admin',
-      superAdminId: superAdmin.id,
-      token: accessToken,
-      deviceType: 'web',
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-    });
+    // [REFRESH TOKENS] Use new persist method that also creates the refresh token
+    const { refreshToken } =
+      await this.sessionService.persistSessionAfterSigning({
+        sessionId,
+        actorType: 'super_admin',
+        superAdminId: superAdmin.id,
+        accessToken,
+        deviceId: dto.deviceId,
+        deviceName: dto.deviceName,
+        deviceType: dto.deviceType ?? 'web',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+
+    const accessExpiresIn = this.sessionService.getExpiresInSeconds(
+      this.configService.get<string>('jwt.accessExpiresIn', '15m'),
+    );
 
     return {
       accessToken,
+      refreshToken,
       tokenType: 'Bearer' as const,
-      expiresIn,
+      expiresIn: accessExpiresIn,
       superAdmin: sanitizeUser(superAdmin),
     };
   }

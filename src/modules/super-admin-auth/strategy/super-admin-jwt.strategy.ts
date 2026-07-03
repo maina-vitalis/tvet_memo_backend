@@ -6,7 +6,11 @@ import { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { DRIZZLE } from '../../../database/database.constants';
 import { DrizzleDB } from '../../../database/drizzle';
-import { superAdmins } from '../../../database/schema';
+import {
+  permissions,
+  superAdminPermissions,
+  superAdmins,
+} from '../../../database/schema';
 import {
   AuthenticatedSuperAdmin,
   SuperAdminJwtPayload,
@@ -78,10 +82,21 @@ export class SuperAdminJwtStrategy extends PassportStrategy<
       throw new UnauthorizedException('Super admin account not found');
     }
 
+    // [PLATFORM RBAC] Load permissions granted to this super admin
+    const perms = await this.db
+      .select({ key: permissions.key })
+      .from(superAdminPermissions)
+      .innerJoin(
+        permissions,
+        eq(superAdminPermissions.permissionId, permissions.id),
+      )
+      .where(eq(superAdminPermissions.superAdminId, superAdmin.id));
+
     return {
       id: superAdmin.id,
       sessionId: payload.jti,
       email: superAdmin.email,
+      permissions: perms.map((p) => p.key),
     };
   }
 }

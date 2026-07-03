@@ -9,6 +9,7 @@ import {
   DEMO_USERS,
 } from './fixtures';
 import { seedSuperAdmin } from './super-admin.seed';
+import { seedPermissions } from './permissions.seed';
 
 function printSummary() {
   const password =
@@ -51,6 +52,9 @@ async function seed() {
 
   console.log('[super_admin]');
   await seedSuperAdmin(db);
+
+  console.log('[permissions]');
+  await seedPermissions(db);
 
   console.log('\n[demo data]');
   await seedDemoData(db);
