@@ -1,3 +1,5 @@
+import { Role } from '../../common/rbac/role.enum';
+
 /** Marker prefix — used to find and skip re-creating demo rows on re-run. */
 export const SEED_MARKER = '[SEED]';
 
@@ -23,8 +25,6 @@ export const DEMO_DEPARTMENTS = [
   { name: 'Business Studies', code: 'BUS' },
 ] as const;
 
-import { Role } from '../../common/rbac/role.enum';
-
 export type DemoUserFixture = {
   key: string;
   role: Role;
@@ -38,14 +38,24 @@ export type DemoUserFixture = {
   pendingSetup?: boolean;
 };
 
+/** [AUTH] Demo users — one per institution role (fixed enum, no roles table). */
 export const DEMO_USERS: DemoUserFixture[] = [
   {
-    key: 'admin',
-    role: Role.INSTITUTION_ADMIN,
-    firstName: 'Grace',
-    lastName: 'Wanjiku',
-    email: 'admin@seed-nti.demo',
+    key: 'chairperson',
+    role: Role.CHAIRPERSON,
+    firstName: 'David',
+    lastName: 'Mwangi',
+    email: 'chair@seed-nti.demo',
     staffNumber: 'STF-001',
+    mustChangePassword: false,
+  },
+  {
+    key: 'board-member',
+    role: Role.BOARD_MEMBER,
+    firstName: 'Sarah',
+    lastName: 'Njeri',
+    email: 'board@seed-nti.demo',
+    staffNumber: 'STF-002',
     mustChangePassword: false,
   },
   {
@@ -54,7 +64,34 @@ export const DEMO_USERS: DemoUserFixture[] = [
     firstName: 'James',
     lastName: 'Ochieng',
     email: 'principal@seed-nti.demo',
-    staffNumber: 'STF-002',
+    staffNumber: 'STF-003',
+    mustChangePassword: false,
+  },
+  {
+    key: 'deputy-academics',
+    role: Role.DEPUTY_PRINCIPAL_ACADEMICS,
+    firstName: 'Lucy',
+    lastName: 'Wambui',
+    email: 'deputy.academics@seed-nti.demo',
+    staffNumber: 'STF-004',
+    mustChangePassword: false,
+  },
+  {
+    key: 'deputy-admin',
+    role: Role.DEPUTY_PRINCIPAL_ADMIN,
+    firstName: 'Samuel',
+    lastName: 'Otieno',
+    email: 'deputy.admin@seed-nti.demo',
+    staffNumber: 'STF-005',
+    mustChangePassword: false,
+  },
+  {
+    key: 'admin',
+    role: Role.INSTITUTION_ADMIN,
+    firstName: 'Grace',
+    lastName: 'Wanjiku',
+    email: 'admin@seed-nti.demo',
+    staffNumber: 'STF-006',
     mustChangePassword: false,
   },
   {
@@ -64,7 +101,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
     lastName: 'Akinyi',
     email: 'hod.ict@seed-nti.demo',
     departmentCode: 'ICT',
-    staffNumber: 'STF-003',
+    staffNumber: 'STF-007',
     mustChangePassword: false,
   },
   {
@@ -74,7 +111,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
     lastName: 'Mutua',
     email: 'trainer@seed-nti.demo',
     departmentCode: 'ICT',
-    staffNumber: 'STF-004',
+    staffNumber: 'STF-008',
     mustChangePassword: false,
   },
   {
@@ -104,11 +141,28 @@ export const DEMO_USERS: DemoUserFixture[] = [
     lastName: 'Hire',
     email: 'pending@seed-nti.demo',
     departmentCode: 'AUTO',
-    staffNumber: 'STF-005',
+    staffNumber: 'STF-009',
     mustChangePassword: true,
     pendingSetup: true,
   },
 ];
+
+/** [AUTH] Optional mobile/registry auth-test institution (see `pnpm db:seed-auth`). */
+export const AUTH_TEST_INSTITUTION = {
+  name: 'Nairobi Technical Institute',
+  subdomain: 'gmail.com',
+  schoolCode: 'KMTC-NRB',
+  contactEmail: 'meshackkimaiyo5@gmail.com',
+};
+
+export const AUTH_TEST_TRAINEE = {
+  firstName: 'Meshack',
+  lastName: 'Kimaiyo',
+  email: 'meshackkimaiyo5@gmail.com',
+  admissionNumber: 'NTI/2023/1234',
+  password: 'NTI/2023/1234',
+  role: Role.TRAINEE,
+};
 
 export const DEMO_MEMOS = [
   {

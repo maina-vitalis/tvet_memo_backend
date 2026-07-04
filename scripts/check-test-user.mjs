@@ -9,10 +9,11 @@ try {
     SELECT
       u.admission_number,
       u.email,
+      u.role,
       u.must_change_password,
       i.name AS institution_name,
       i.school_code
-    FROM "user" u
+    FROM users u
     JOIN institution i ON i.id = u.institution_id
     WHERE u.admission_number IS NOT NULL
     ORDER BY u.created_at DESC
@@ -25,12 +26,13 @@ try {
   const trainee = users.find((u) => u.admission_number === 'NTI/2023/1234');
   if (trainee) {
     const [row] = await sql`
-      SELECT password_hash FROM "user"
+      SELECT password_hash FROM users
       WHERE admission_number = 'NTI/2023/1234'
       LIMIT 1
     `;
     const matches = await argon2.verify(row.password_hash, 'NTI/2023/1234');
     console.log('\nPassword "NTI/2023/1234" matches hash:', matches);
+    console.log('Role:', trainee.role);
   } else {
     console.log('\nNo user with admission NTI/2023/1234 — run: pnpm db:seed-auth');
   }

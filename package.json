@@ -28,7 +28,7 @@
     "db:setup": "pnpm db:migrate && pnpm db:seed",
     "db:reset": "node scripts/reset-db.mjs",
     "db:fresh": "node scripts/reset-db.mjs && pnpm db:migrate && pnpm db:seed",
-    "db:seed-auth": "node scripts/seed-auth-test.mjs",
+    "db:seed-auth": "tsx src/database/seed/auth-test.ts",
     "test:auth": "node scripts/test-auth-endpoints.mjs",
     "seed:super-admin": "tsx src/database/seed/super-admin.ts"
   },

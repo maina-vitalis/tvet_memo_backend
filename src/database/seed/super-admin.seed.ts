@@ -25,12 +25,25 @@ export async function seedSuperAdmin(db: DrizzleDB) {
     .where(eq(users.email, normalizedEmail))
     .limit(1);
 
+  const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+
   if (existing) {
-    console.log(`  super_admin: exists (${normalizedEmail})`);
+    await db
+      .update(users)
+      .set({
+        firstName,
+        lastName,
+        passwordHash,
+        role: Role.SUPER_ADMIN,
+        institutionId: null,
+        mustChangePassword: false,
+        isActive: true,
+      })
+      .where(eq(users.id, existing.id));
+
+    console.log(`  super_admin: updated (${normalizedEmail})`);
     return;
   }
-
-  const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
   await db.insert(users).values({
     email: normalizedEmail,

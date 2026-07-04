@@ -165,6 +165,22 @@ async function ensureUsers(
       : undefined;
 
     if (existing) {
+      await db
+        .update(users)
+        .set({
+          institutionId,
+          role: fixture.role,
+          departmentId,
+          firstName: fixture.firstName,
+          lastName: fixture.lastName,
+          staffNumber: fixture.staffNumber,
+          admissionNumber: fixture.admissionNumber,
+          passwordHash,
+          mustChangePassword: fixture.mustChangePassword ?? false,
+          isActive: true,
+        })
+        .where(eq(users.id, existing.id));
+
       ids[fixture.key] = existing.id;
       continue;
     }

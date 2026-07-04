@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permission.decorator';
@@ -27,7 +37,10 @@ export class MemosController {
   }
 
   @Get(':id')
-  findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+  findOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.memosService.findOne(user.institutionId!, id);
   }
 
@@ -40,7 +53,7 @@ export class MemosController {
   @Patch(':id')
   update(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateMemoDto,
   ) {
     return this.memosService.update(user.institutionId!, user.id, id, dto);
@@ -52,21 +65,24 @@ export class MemosController {
   @Post(':id/send')
   send(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request,
   ) {
     return this.memosService.send(user.institutionId!, user.id, id, req);
   }
 
   @Post(':id/read')
-  markRead(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+  markRead(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
     return this.memosService.markRead(user.institutionId!, user.id, id);
   }
 
   @Post(':id/acknowledge')
   acknowledge(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AcknowledgeMemoDto,
   ) {
     return this.memosService.acknowledge(user.institutionId!, user.id, id, dto);

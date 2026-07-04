@@ -15,6 +15,13 @@
       "when": 1783171200000,
       "tag": "20260704000000_unified_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783172384768,
+      "tag": "20260704133944_sticky_colonel_america",
+      "breakpoints": true
     }
   ]
 }
