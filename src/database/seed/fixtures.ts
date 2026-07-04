@@ -23,9 +23,11 @@ export const DEMO_DEPARTMENTS = [
   { name: 'Business Studies', code: 'BUS' },
 ] as const;
 
+import { Role } from '../../common/rbac/role.enum';
+
 export type DemoUserFixture = {
   key: string;
-  roleName: string;
+  role: Role;
   firstName: string;
   lastName: string;
   email: string;
@@ -39,7 +41,7 @@ export type DemoUserFixture = {
 export const DEMO_USERS: DemoUserFixture[] = [
   {
     key: 'admin',
-    roleName: 'Institutional Admin',
+    role: Role.INSTITUTION_ADMIN,
     firstName: 'Grace',
     lastName: 'Wanjiku',
     email: 'admin@seed-nti.demo',
@@ -48,7 +50,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
   },
   {
     key: 'principal',
-    roleName: 'Principal',
+    role: Role.PRINCIPAL,
     firstName: 'James',
     lastName: 'Ochieng',
     email: 'principal@seed-nti.demo',
@@ -57,7 +59,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
   },
   {
     key: 'hod-ict',
-    roleName: 'Head of Department',
+    role: Role.HOD,
     firstName: 'Mary',
     lastName: 'Akinyi',
     email: 'hod.ict@seed-nti.demo',
@@ -67,7 +69,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
   },
   {
     key: 'trainer-ict',
-    roleName: 'Trainer',
+    role: Role.TRAINER,
     firstName: 'Peter',
     lastName: 'Mutua',
     email: 'trainer@seed-nti.demo',
@@ -77,7 +79,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
   },
   {
     key: 'trainee-1',
-    roleName: 'Trainee',
+    role: Role.TRAINEE,
     firstName: 'Faith',
     lastName: 'Chebet',
     email: 'trainee1@seed-nti.demo',
@@ -87,7 +89,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
   },
   {
     key: 'trainee-2',
-    roleName: 'Trainee',
+    role: Role.TRAINEE,
     firstName: 'Brian',
     lastName: 'Kiprop',
     email: 'trainee2@seed-nti.demo',
@@ -97,7 +99,7 @@ export const DEMO_USERS: DemoUserFixture[] = [
   },
   {
     key: 'pending-setup',
-    roleName: 'Trainer',
+    role: Role.TRAINER,
     firstName: 'New',
     lastName: 'Hire',
     email: 'pending@seed-nti.demo',
@@ -142,6 +144,6 @@ export const DEMO_MEMOS = [
     targetType: 'role' as const,
     senderKey: 'admin',
     requiresAck: false,
-    roleName: 'Trainer',
+    role: Role.TRAINER,
   },
 ] as const;

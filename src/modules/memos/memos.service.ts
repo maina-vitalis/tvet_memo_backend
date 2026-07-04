@@ -306,14 +306,14 @@ export class MemosService {
       }
 
       case MemoTargetTypeDto.ROLE: {
-        const roleIds = (payload.role_ids as string[]) ?? [];
-        if (!roleIds.length) {
-          throw new BadRequestException('role_ids required in target_payload');
+        const targetRoles = (payload.roles as (typeof users.$inferSelect.role)[]) ?? [];
+        if (!targetRoles.length) {
+          throw new BadRequestException('roles required in target_payload');
         }
         const rows = await this.db
           .select({ id: users.id })
           .from(users)
-          .where(and(baseConditions, inArray(users.roleId, roleIds)));
+          .where(and(baseConditions, inArray(users.role, targetRoles)));
         return rows.map((r) => r.id);
       }
 

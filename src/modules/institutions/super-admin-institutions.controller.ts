@@ -8,16 +8,15 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { Public } from '../../common/decorators/public.decorator';
-import { RequirePermission } from '../../common/decorators/require-permission.decorator';
-import { SuperAdminGuard } from '../../common/guards/super-admin.guard';
+import { RequirePermissions } from '../../common/decorators/require-permission.decorator';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { Permission } from '../../common/rbac/permission.enum';
 import { ProvisionInstitutionDto } from './dto/provision-institution.dto';
 import { UpdateInstitutionDto } from './dto/update-institution.dto';
 import { SuperAdminInstitutionsService } from './super-admin-institutions.service';
 
-@Public()
-@UseGuards(SuperAdminGuard, PermissionsGuard)
+/** [RBAC] Super-admin institution management — gated by MANAGE_INSTITUTIONS. */
+@UseGuards(PermissionsGuard)
 @Controller('superadmin/institutions')
 export class SuperAdminInstitutionsController {
   constructor(
@@ -25,24 +24,25 @@ export class SuperAdminInstitutionsController {
   ) {}
 
   @Get()
+  @RequirePermissions(Permission.MANAGE_INSTITUTIONS)
   findAll() {
     return this.superAdminInstitutionsService.findAll();
   }
 
-  @RequirePermission('platform.institutions.create')
   @Post('provision')
+  @RequirePermissions(Permission.MANAGE_INSTITUTIONS)
   provision(@Body() dto: ProvisionInstitutionDto) {
     return this.superAdminInstitutionsService.provision(dto);
   }
 
-  @RequirePermission('platform.institutions.manage')
   @Patch(':id')
+  @RequirePermissions(Permission.MANAGE_INSTITUTIONS)
   update(@Param('id') id: string, @Body() dto: UpdateInstitutionDto) {
     return this.superAdminInstitutionsService.update(id, dto);
   }
 
-  @RequirePermission('platform.institutions.manage')
   @Delete(':id')
+  @RequirePermissions(Permission.MANAGE_INSTITUTIONS)
   remove(@Param('id') id: string) {
     return this.superAdminInstitutionsService.remove(id);
   }

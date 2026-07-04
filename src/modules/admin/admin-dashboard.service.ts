@@ -18,6 +18,9 @@ export class AdminDashboardService {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
 
   async getSummary(user: AuthenticatedUser) {
+    if (!user.institutionId) {
+      throw new NotFoundException('Institution context required');
+    }
     const institutionId = user.institutionId;
 
     const [institution] = await this.db

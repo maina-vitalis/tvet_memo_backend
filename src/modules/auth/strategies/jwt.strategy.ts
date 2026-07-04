@@ -6,13 +6,15 @@ import { Request } from 'express';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { DRIZZLE } from '../../../database/database.constants';
 import { DrizzleDB } from '../../../database/drizzle';
-import { permissions, rolePermissions } from '../../../database/schema';
+import { users } from '../../../database/schema';
+import { Role } from '../../../common/rbac/role.enum';
 import {
   AuthenticatedUser,
   JwtPayload,
 } from '../../../common/types/auth-user.type';
 import { SessionService } from '../session.service';
 
+/** [AUTH] Validates JWT and attaches unified user context to request.user. */
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
@@ -28,40 +30,36 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(
-    req: Request,
-    payload: JwtPayload,
-  ): Promise<AuthenticatedUser> {
+  async validate(req: Request, payload: JwtPayload): Promise<AuthenticatedUser> {
     const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
 
     if (!token || !payload.jti) {
       throw new UnauthorizedException('Invalid token');
     }
 
-    // Uses redis-cached session (with DB fallback) to verify not revoked/expired
-    await this.sessionService.assertActive(payload.jti, token, 'user');
+    await this.sessionService.assertActive(payload.jti, token);
 
-    // [RBAC] Load the user's current permissions from the permissions table.
-    // This is the authoritative source. Short-lived tokens mean this stays fresh.
-    const userPermissions = await this.db
-      .select({ key: permissions.key })
-      .from(rolePermissions)
-      .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
-      .where(eq(rolePermissions.roleId, payload.roleId));
+    const [user] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, payload.sub))
+      .limit(1);
 
-    const permissionKeys = userPermissions.map((p) => p.key);
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User no longer active');
+    }
 
     return {
-      id: payload.sub,
+      id: user.id,
       sessionId: payload.jti,
-      institutionId: payload.institutionId,
-      roleId: payload.roleId,
-      departmentId: payload.departmentId,
-      email: payload.email,
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      mustChangePassword: payload.mustChangePassword,
-      permissions: permissionKeys,
+      role: user.role as Role,
+      institutionId: user.institutionId,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      departmentId: user.departmentId,
+      cohortId: user.cohortId,
+      mustChangePassword: user.mustChangePassword,
     };
   }
 }

@@ -9,10 +9,10 @@ import { ConfigService } from '@nestjs/config';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
+import { Role } from '../../common/rbac/role.enum';
 import {
   accountSetupTokens,
   institutions,
-  roles,
   users,
   sessions,
   memoRecipients,
@@ -23,10 +23,7 @@ import {
   auditLogs,
   memos,
   departments,
-  permissions,
-  rolePermissions,
 } from '../../database/schema';
-import { DEFAULT_ROLES } from '../../database/seed/default-roles';
 import {
   generateSetupToken,
   getLockedPasswordHash,
@@ -106,129 +103,12 @@ export class SuperAdminInstitutionsService {
         })
         .returning();
 
-      // ====================================================================
-      // RBAC: Insert roles + assign permissions from the global registry
-      // ====================================================================
-      const insertedRoles = await tx
-        .insert(roles)
-        .values(
-          DEFAULT_ROLES.map((role) => ({
-            ...role,
-            institutionId: institution.id,
-          })),
-        )
-        .returning();
-
-      // Load all permissions (they are global)
-      const allPerms = await tx.select().from(permissions);
-
-      const permMap = new Map(allPerms.map((p) => [p.key, p.id]));
-
-      // Define sensible default permission grants per role name
-      // This is the foundation for proper RBAC instead of unstructured JSONB
-      const rolePermissionAssignments: Record<string, string[]> = {
-        'Board of Governors': [
-          'tenant.memos.send',
-          'tenant.memos.send.broadcast',
-          'tenant.memos.send.target_department',
-          'tenant.memos.send.target_role',
-          'tenant.memos.send.target_individual',
-          'tenant.memos.view.all',
-          'tenant.users.view',
-          'tenant.institution.settings',
-          'tenant.institution.reports',
-        ],
-        'Institutional Admin': [
-          'tenant.memos.send',
-          'tenant.memos.send.broadcast',
-          'tenant.memos.send.target_department',
-          'tenant.memos.send.target_role',
-          'tenant.memos.send.target_individual',
-          'tenant.memos.view.all',
-          'tenant.users.create',
-          'tenant.users.manage',
-          'tenant.users.view',
-          'tenant.users.assign_roles',
-          'tenant.roles.manage',
-          'tenant.roles.assign',
-          'tenant.departments.manage',
-          'tenant.institution.settings',
-          'tenant.institution.reports',
-        ],
-        Principal: [
-          'tenant.memos.send',
-          'tenant.memos.send.broadcast',
-          'tenant.memos.send.target_department',
-          'tenant.memos.send.target_role',
-          'tenant.memos.send.target_individual',
-          'tenant.memos.view.all',
-          'tenant.users.manage',
-          'tenant.users.view',
-          'tenant.users.assign_roles',
-          'tenant.institution.reports',
-        ],
-        'Deputy Principal': [
-          'tenant.memos.send',
-          'tenant.memos.send.broadcast',
-          'tenant.memos.send.target_department',
-          'tenant.memos.send.target_role',
-          'tenant.memos.send.target_individual',
-          'tenant.memos.view.all',
-          'tenant.users.view',
-        ],
-        'Head of Department': [
-          'tenant.memos.send',
-          'tenant.memos.send.target_role',
-          'tenant.memos.send.target_individual',
-          'tenant.memos.view.department',
-          'tenant.users.view',
-        ],
-        Trainer: [
-          'tenant.memos.send',
-          'tenant.memos.send.target_individual',
-          'tenant.memos.view.department',
-        ],
-        'Support Staff': [
-          'tenant.memos.view.own',
-        ],
-        Trainee: [
-          'tenant.memos.view.own',
-        ],
-      };
-
-      // Insert role_permissions for each role
-      for (const role of insertedRoles) {
-        const keys = rolePermissionAssignments[role.name] || [];
-        const permIds = keys
-          .map((k) => permMap.get(k))
-          .filter((id): id is string => !!id);
-
-        if (permIds.length > 0) {
-          await tx.insert(rolePermissions).values(
-            permIds.map((pid) => ({
-              roleId: role.id,
-              permissionId: pid,
-            })),
-          );
-        }
-      }
-
-      //checking if institution admin exists in the database before onboarding
-      const institutionalAdminRole = insertedRoles.find(
-        (role) => role.name === 'Institutional Admin',
-      );
-
-      if (!institutionalAdminRole) {
-        throw new NotFoundException(
-          'Institutional Admin role not found after seeding',
-        );
-      }
-
+      // [RBAC] Onboard the operational INSTITUTION_ADMIN seat (fixed enum role).
       const [rootUser] = await tx
         .insert(users)
         .values({
           institutionId: institution.id,
-          roleId: institutionalAdminRole.id,
+          role: Role.INSTITUTION_ADMIN,
           firstName,
           lastName,
           email: adminEmail,
@@ -363,9 +243,6 @@ export class SuperAdminInstitutionsService {
 
       // Delete departments
       await tx.delete(departments).where(eq(departments.institutionId, id));
-
-      // Delete roles
-      await tx.delete(roles).where(eq(roles.institutionId, id));
 
       // Finally, delete the institution
       await tx.delete(institutions).where(eq(institutions.id, id));

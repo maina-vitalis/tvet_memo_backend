@@ -9,14 +9,13 @@ import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { and, eq, isNull } from 'drizzle-orm';
 import { Request } from 'express';
-import { hasAdminPortalAccess } from '../../common/utils/admin-rights.util';
+import { Role } from '../../common/rbac/role.enum';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import {
   accountSetupTokens,
   institutions,
   otps,
-  roles,
   users,
 } from '../../database/schema';
 import {
@@ -41,7 +40,6 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../email/email.service';
 import {
-  AdminLoginDto,
   CompleteAccountSetupDto,
   VerifySetupTokenDto,
 } from './dto/admin-auth.dto';
@@ -52,6 +50,7 @@ import {
   EmailPasswordLoginDto,
   InitiateEmailLoginDto,
   RegistryLoginDto,
+  UnifiedLoginDto,
   ValidateEmailOtpDto,
 } from './dto/login.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
@@ -255,7 +254,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.createSession(user, dto.institutionId, dto, req);
+    return this.createSession(user, dto, req);
   }
 
   async completeEmailSetup(dto: CompleteEmailSetupDto, req: Request) {
@@ -305,12 +304,7 @@ export class AuthService {
 
     await this.db.update(otps).set({ used: true }).where(eq(otps.id, otp.id));
 
-    const session = await this.createSession(
-      updatedUser,
-      dto.institutionId,
-      dto,
-      req,
-    );
+    const session = await this.createSession(updatedUser, dto, req);
 
     await this.auditService.log({
       institutionId: dto.institutionId,
@@ -375,74 +369,63 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    return this.createSession(user, dto.institutionId, dto, req);
+    return this.createSession(user, dto, req);
   }
 
-  //tenant admin login
-  async adminLogin(dto: AdminLoginDto, req: Request) {
-    const subdomain = dto.subdomain.trim().toLowerCase();
+  /** [AUTH] Unified login for all roles — branches only on totpEnabled. */
+  async login(dto: UnifiedLoginDto, req: Request) {
     const email = dto.email.toLowerCase();
 
-    const institution =
-      await this.institutionsService.findBySubdomain(subdomain);
-
-    const [record] = await this.db
-      .select({
-        user: users,
-        role: roles,
-      })
+    const [user] = await this.db
+      .select()
       .from(users)
-      .innerJoin(roles, eq(users.roleId, roles.id))
-      .where(
-        and(
-          eq(users.institutionId, institution.id),
-          eq(users.email, email),
-          eq(users.isActive, true),
-        ),
-      )
+      .where(and(eq(users.email, email), eq(users.isActive, true)))
       .limit(1);
 
-    if (
-      !record ||
-      !hasAdminPortalAccess(
-        record.role.adminRights as Record<string, unknown> | null,
-      )
-    ) {
+    if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const setupPending = await this.institutionsService.hasPendingSetup(
-      record.user.id,
-    );
-    if (setupPending) {
-      throw new UnauthorizedException(
-        'Account setup is pending. Please use the setup link sent to your email.',
-      );
-    }
-
-    const passwordValid = await argon2.verify(
-      record.user.passwordHash,
-      dto.password,
-    );
+    const passwordValid = await argon2.verify(user.passwordHash, dto.password);
     if (!passwordValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const session = await this.createSession(
-      record.user,
-      institution.id,
-      dto,
-      req,
-    );
+    if (user.totpEnabled) {
+      return { requiresTotp: true, userId: user.id };
+    }
 
-    return {
-      ...session,
-      institution: {
-        id: institution.id,
-        name: institution.name,
-        subdomain: institution.subdomain,
-      },
-    };
+    if (user.role !== Role.SUPER_ADMIN) {
+      const setupPending = await this.institutionsService.hasPendingSetup(
+        user.id,
+      );
+      if (user.mustChangePassword || setupPending) {
+        throw new UnauthorizedException(
+          'Account setup is pending. Please use the setup link sent to your email.',
+        );
+      }
+    }
+
+    const session = await this.createSession(user, dto, req);
+
+    if (user.institutionId) {
+      const [institution] = await this.db
+        .select({
+          id: institutions.id,
+          name: institutions.name,
+          subdomain: institutions.subdomain,
+        })
+        .from(institutions)
+        .where(eq(institutions.id, user.institutionId))
+        .limit(1);
+
+      return {
+        ...session,
+        institution: institution ?? null,
+      };
+    }
+
+    return session;
   }
 
   async verifySetupToken(dto: VerifySetupTokenDto) {
@@ -487,12 +470,7 @@ export class AuthService {
       .set({ usedAt: new Date() })
       .where(eq(accountSetupTokens.id, record.token.id));
 
-    const session = await this.createSession(
-      updatedUser,
-      record.institution.id,
-      dto,
-      req,
-    );
+    const session = await this.createSession(updatedUser, dto, req);
 
     await this.auditService.log({
       institutionId: record.institution.id,
@@ -561,7 +539,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.createSession(user, dto.institutionId, dto, req);
+    return this.createSession(user, dto, req);
   }
 
   private async findValidEmailOtp(
@@ -635,7 +613,6 @@ export class AuthService {
    */
   private async createSession(
     user: typeof users.$inferSelect,
-    institutionId: string,
     dto: {
       deviceName?: string;
       deviceType?: string;
@@ -650,25 +627,17 @@ export class AuthService {
 
     const sessionId = generateSessionId();
 
-    // Short payload (avoid bloat). Role details fetched on demand when needed.
     const payload: JwtPayload = {
       sub: user.id,
       jti: sessionId,
-      institutionId,
-      roleId: user.roleId,
-      departmentId: user.departmentId,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      mustChangePassword: user.mustChangePassword,
+      role: user.role as Role,
+      institutionId: user.institutionId,
     };
 
     const accessToken = await this.jwtService.signAsync(payload);
 
-    // NEW: persist both access + generate refresh using the new service
     const { refreshToken } = await this.sessionService.persistSessionAfterSigning({
       sessionId,
-      actorType: 'user',
       userId: user.id,
       accessToken,
       deviceId: dto.deviceId,
@@ -678,15 +647,17 @@ export class AuthService {
       userAgent: req.get('user-agent') ?? undefined,
     });
 
-    await this.auditService.log({
-      institutionId,
-      actorId: user.id,
-      action: 'auth.login',
-      entityType: 'user',
-      entityId: user.id,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-    });
+    if (user.institutionId) {
+      await this.auditService.log({
+        institutionId: user.institutionId,
+        actorId: user.id,
+        action: 'auth.login',
+        entityType: 'user',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+    }
 
     const accessExpiresIn = this.sessionService.getExpiresInSeconds(
       this.configService.get<string>('jwt.accessExpiresIn', '15m'),
@@ -696,7 +667,7 @@ export class AuthService {
       accessToken,
       refreshToken,
       tokenType: 'Bearer' as const,
-      expiresIn: accessExpiresIn, // seconds (number) - important for client timers
+      expiresIn: accessExpiresIn,
       user: sanitizeUser(user),
       mustChangePassword: user.mustChangePassword,
     };
@@ -715,15 +686,17 @@ export class AuthService {
     if (user?.sessionId) {
       await this.sessionService.revoke(user.sessionId);
 
-      await this.auditService.log({
-        institutionId: user.institutionId,
-        actorId: user.id,
-        action: 'session.revoke',
-        entityType: 'session',
-        entityId: user.sessionId,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent') ?? undefined,
-      });
+      if (user.institutionId) {
+        await this.auditService.log({
+          institutionId: user.institutionId,
+          actorId: user.id,
+          action: 'session.revoke',
+          entityType: 'session',
+          entityId: user.sessionId,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent') ?? undefined,
+        });
+      }
     } else if (refreshToken) {
       await this.sessionService.revokeByRefreshToken(refreshToken);
       // Light audit - we may not know the actor
@@ -755,18 +728,20 @@ export class AuthService {
    * After this, the client must clear tokens and the user will be logged out everywhere.
    */
   async logoutAll(user: AuthenticatedUser, req: Request) {
-    const count = await this.sessionService.revokeAllForActor({ userId: user.id });
+    const count = await this.sessionService.revokeAllForUser(user.id);
 
-    await this.auditService.log({
-      institutionId: user.institutionId,
-      actorId: user.id,
-      action: 'session.revoke_all',
-      entityType: 'session',
-      entityId: user.id,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-      afterState: { revokedCount: count },
-    });
+    if (user.institutionId) {
+      await this.auditService.log({
+        institutionId: user.institutionId,
+        actorId: user.id,
+        action: 'session.revoke_all',
+        entityType: 'session',
+        entityId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+        afterState: { revokedCount: count },
+      });
+    }
 
     return { message: 'Signed out from all devices', revokedCount: count };
   }
@@ -787,15 +762,17 @@ export class AuthService {
 
     await this.sessionService.revoke(sessionId);
 
-    await this.auditService.log({
-      institutionId: user.institutionId,
-      actorId: user.id,
-      action: 'session.revoke',
-      entityType: 'session',
-      entityId: sessionId,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-    });
+    if (user.institutionId) {
+      await this.auditService.log({
+        institutionId: user.institutionId,
+        actorId: user.id,
+        action: 'session.revoke',
+        entityType: 'session',
+        entityId: sessionId,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+    }
 
     return { message: 'Device signed out successfully' };
   }
@@ -807,17 +784,11 @@ export class AuthService {
     return str.includes('.') ? str.replace(/\.\d+$/, '.xxx') : str;
   }
 
-  async getProfile(userId: string, institutionId: string) {
+  async getProfile(userId: string) {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(
-        and(
-          eq(users.id, userId),
-          eq(users.institutionId, institutionId),
-          eq(users.isActive, true),
-        ),
-      )
+      .where(and(eq(users.id, userId), eq(users.isActive, true)))
       .limit(1);
 
     if (!user) {
@@ -829,7 +800,6 @@ export class AuthService {
 
   async changePassword(
     userId: string,
-    institutionId: string,
     currentPassword: string,
     newPassword: string,
     req: Request,
@@ -837,7 +807,7 @@ export class AuthService {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(and(eq(users.id, userId), eq(users.institutionId, institutionId)))
+      .where(eq(users.id, userId))
       .limit(1);
 
     if (!user) {
@@ -858,37 +828,22 @@ export class AuthService {
       .set({ passwordHash, mustChangePassword: false })
       .where(eq(users.id, userId));
 
-    await this.auditService.log({
-      institutionId,
-      actorId: userId,
-      action: 'user.password_reset',
-      entityType: 'user',
-      entityId: userId,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-    });
+    if (user.institutionId) {
+      await this.auditService.log({
+        institutionId: user.institutionId,
+        actorId: userId,
+        action: 'user.password_reset',
+        entityType: 'user',
+        entityId: userId,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+    }
 
     return { message: 'Password updated successfully' };
   }
 
-  // ========================================================================
-  // [REFRESH TOKENS] REFRESH FLOW
-  // ========================================================================
-
-  /**
-   * [REFRESH TOKENS]
-   * Validates a refresh token, rotates it, signs a new short access JWT,
-   * and returns the new pair.
-   *
-   * This endpoint should be called by clients when:
-   * - Access token is expired (401)
-   * - Proactively before expiry (using expiresIn or JWT exp claim)
-   *
-   * Security notes for reviewer:
-   * - Old refresh is immediately invalidated (rotation).
-   * - We do NOT require the old access token here.
-   * - On any failure the client must fall back to full re-authentication.
-   */
+  /** [AUTH] Refresh access token using a valid refresh token (all roles). */
   async refreshTokens(
     refreshToken: string,
     req: Request,
@@ -898,19 +853,16 @@ export class AuthService {
     tokenType: 'Bearer';
     expiresIn: number;
   }> {
-    // Delegate heavy lifting (validation + rotation) to SessionService
     const rotation = await this.sessionService.rotateAndIssueNewAccess({
       refreshToken,
-      actorType: 'user', // for now; we can generalize
       ipAddress: req.ip,
       userAgent: req.get('user-agent') ?? undefined,
     });
 
-    // Rebuild a fresh access payload. We re-fetch minimal user data to be safe.
     const [user] = await this.db
       .select()
       .from(users)
-      .where(eq(users.id, rotation.newAccessTokenPayloadBase.sub))
+      .where(eq(users.id, rotation.userId))
       .limit(1);
 
     if (!user || !user.isActive) {
@@ -921,18 +873,12 @@ export class AuthService {
     const payload: JwtPayload = {
       sub: user.id,
       jti: rotation.newSessionId,
+      role: user.role as Role,
       institutionId: user.institutionId,
-      roleId: user.roleId,
-      departmentId: user.departmentId,
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      mustChangePassword: user.mustChangePassword,
     };
 
     const newAccessToken = await this.jwtService.signAsync(payload);
 
-    // Tell session service about the newly signed access token
     await this.sessionService.updateAccessTokenAfterRefresh({
       sessionId: rotation.newSessionId,
       newAccessToken,
@@ -942,15 +888,17 @@ export class AuthService {
       this.configService.get<string>('jwt.accessExpiresIn', '15m'),
     );
 
-    await this.auditService.log({
-      institutionId: user.institutionId,
-      actorId: user.id,
-      action: 'auth.refresh',
-      entityType: 'session',
-      entityId: rotation.newSessionId,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-    });
+    if (user.institutionId) {
+      await this.auditService.log({
+        institutionId: user.institutionId,
+        actorId: user.id,
+        action: 'auth.refresh',
+        entityType: 'session',
+        entityId: rotation.newSessionId,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
+    }
 
     return {
       accessToken: newAccessToken,

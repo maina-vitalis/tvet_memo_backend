@@ -1,6 +1,8 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   char,
+  check,
   pgTable,
   text,
   timestamp,
@@ -8,27 +10,28 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
+import { roleEnum } from './enums';
 import { institutions } from './institutions';
-import { roles } from './roles';
 
+/**
+ * [AUTH] Unified users table — all roles including SUPER_ADMIN.
+ * SUPER_ADMIN has institutionId = NULL; all other roles require it.
+ */
 export const users = pgTable(
-  'user',
+  'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    institutionId: uuid('institution_id')
-      .notNull()
-      .references(() => institutions.id),
-    roleId: uuid('role_id')
-      .notNull()
-      .references(() => roles.id),
+    email: varchar('email', { length: 255 }).notNull().unique(),
+    passwordHash: text('password_hash').notNull(),
+    role: roleEnum('role').notNull(),
+    institutionId: uuid('institution_id').references(() => institutions.id),
     departmentId: uuid('department_id'),
+    cohortId: uuid('cohort_id'),
     firstName: varchar('first_name', { length: 100 }).notNull(),
     lastName: varchar('last_name', { length: 100 }).notNull(),
-    email: varchar('email', { length: 255 }).notNull(),
     admissionNumber: varchar('admission_number', { length: 50 }),
     staffNumber: varchar('staff_number', { length: 50 }),
     phoneNumber: varchar('phone_number', { length: 20 }),
-    passwordHash: text('password_hash').notNull(),
     totpSecret: text('totp_secret'),
     totpEnabled: boolean('totp_enabled').notNull().default(false),
     fcmToken: text('fcm_token'),
@@ -48,15 +51,18 @@ export const users = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    unique('user_institution_email_unique').on(
-      table.institutionId,
-      table.email,
+    check(
+      'role_institution_consistency',
+      sql`(
+        (${table.role} = 'SUPER_ADMIN' AND ${table.institutionId} IS NULL) OR
+        (${table.role} != 'SUPER_ADMIN' AND ${table.institutionId} IS NOT NULL)
+      )`,
     ),
-    unique('user_institution_staff_number_unique').on(
+    unique('users_institution_staff_number_unique').on(
       table.institutionId,
       table.staffNumber,
     ),
-    unique('user_institution_admission_number_unique').on(
+    unique('users_institution_admission_number_unique').on(
       table.institutionId,
       table.admissionNumber,
     ),

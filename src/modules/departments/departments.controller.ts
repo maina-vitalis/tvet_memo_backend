@@ -18,12 +18,12 @@ export class DepartmentsController {
 
   @Get()
   findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.departmentsService.findAll(user.institutionId);
+    return this.departmentsService.findAll(user.institutionId!);
   }
 
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.departmentsService.findOne(user.institutionId, id);
+    return this.departmentsService.findOne(user.institutionId!, id);
   }
 
   @Post()
@@ -31,7 +31,7 @@ export class DepartmentsController {
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateDepartmentDto,
   ) {
-    return this.departmentsService.create(user.institutionId, user.id, dto);
+    return this.departmentsService.create(user.institutionId!, user.id, dto);
   }
 
   @Patch(':id')
@@ -40,11 +40,11 @@ export class DepartmentsController {
     @Param('id') id: string,
     @Body() dto: UpdateDepartmentDto,
   ) {
-    return this.departmentsService.update(user.institutionId, user.id, id, dto);
+    return this.departmentsService.update(user.institutionId!, user.id, id, dto);
   }
 
   @Delete(':id')
   deactivate(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.departmentsService.deactivate(user.institutionId, id);
+    return this.departmentsService.deactivate(user.institutionId!, id);
   }
 }

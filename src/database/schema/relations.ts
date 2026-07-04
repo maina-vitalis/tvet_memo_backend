@@ -1,9 +1,7 @@
 import { relations } from 'drizzle-orm';
 import { institutions } from './institutions';
-import { roles } from './roles';
 import { departments } from './departments';
 import { users } from './users';
-import { superAdmins } from './super-admins';
 import { sessions } from './sessions';
 import { memos } from './memos';
 import { memoRecipients } from './memo-recipients';
@@ -11,54 +9,14 @@ import { attachments } from './attachments';
 import { notifications } from './notifications';
 import { messageThreads } from './message-threads';
 import { auditLogs } from './audit-logs';
-import { permissions } from './permissions';
-import { rolePermissions } from './role-permissions';
-import { superAdminPermissions } from './super-admin-permissions';
 
 export const institutionsRelations = relations(institutions, ({ many }) => ({
-  roles: many(roles),
   departments: many(departments),
   users: many(users),
   memos: many(memos),
   auditLogs: many(auditLogs),
   notifications: many(notifications),
   messageThreads: many(messageThreads),
-}));
-
-export const rolesRelations = relations(roles, ({ one, many }) => ({
-  institution: one(institutions, {
-    fields: [roles.institutionId],
-    references: [institutions.id],
-  }),
-  users: many(users),
-  permissions: many(rolePermissions),
-}));
-
-export const permissionsRelations = relations(permissions, ({ many }) => ({
-  rolePermissions: many(rolePermissions),
-  superAdminPermissions: many(superAdminPermissions),
-}));
-
-export const rolePermissionsRelations = relations(rolePermissions, ({ one }) => ({
-  role: one(roles, {
-    fields: [rolePermissions.roleId],
-    references: [roles.id],
-  }),
-  permission: one(permissions, {
-    fields: [rolePermissions.permissionId],
-    references: [permissions.id],
-  }),
-}));
-
-export const superAdminPermissionsRelations = relations(superAdminPermissions, ({ one }) => ({
-  superAdmin: one(superAdmins, {
-    fields: [superAdminPermissions.superAdminId],
-    references: [superAdmins.id],
-  }),
-  permission: one(permissions, {
-    fields: [superAdminPermissions.permissionId],
-    references: [permissions.id],
-  }),
 }));
 
 export const departmentsRelations = relations(departments, ({ one, many }) => ({
@@ -78,10 +36,6 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     fields: [users.institutionId],
     references: [institutions.id],
   }),
-  role: one(roles, {
-    fields: [users.roleId],
-    references: [roles.id],
-  }),
   department: one(departments, {
     fields: [users.departmentId],
     references: [departments.id],
@@ -95,10 +49,6 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, {
     fields: [sessions.userId],
     references: [users.id],
-  }),
-  superAdmin: one(superAdmins, {
-    fields: [sessions.superAdminId],
-    references: [superAdmins.id],
   }),
 }));
 

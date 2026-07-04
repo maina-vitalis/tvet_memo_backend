@@ -1,5 +1,7 @@
+import { Role } from '../../../common/rbac/role.enum';
 import {
   IsEmail,
+  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -9,8 +11,8 @@ import {
 } from 'class-validator';
 
 export class CreateUserDto {
-  @IsUUID()
-  roleId!: string;
+  @IsEnum(Role)
+  role!: Role;
 
   @IsUUID()
   @IsOptional()
@@ -45,9 +47,9 @@ export class CreateUserDto {
 }
 
 export class UpdateUserDto {
-  @IsUUID()
+  @IsEnum(Role)
   @IsOptional()
-  roleId?: string;
+  role?: Role;
 
   @IsUUID()
   @IsOptional()
@@ -67,4 +69,9 @@ export class UpdateUserDto {
   @IsOptional()
   @MaxLength(20)
   phoneNumber?: string;
+}
+
+export class UpdateUserRoleDto {
+  @IsEnum(Role)
+  role!: Role;
 }

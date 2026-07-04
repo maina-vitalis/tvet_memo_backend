@@ -5,7 +5,6 @@ import { Public } from '../../common/decorators/public.decorator';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { AuthService } from './auth.service';
 import {
-  AdminLoginDto,
   CompleteAccountSetupDto,
   VerifySetupTokenDto,
 } from './dto/admin-auth.dto';
@@ -18,6 +17,7 @@ import {
   InitiateEmailLoginDto,
   RefreshTokenDto,
   RegistryLoginDto,
+  UnifiedLoginDto,
   ValidateEmailOtpDto,
 } from './dto/login.dto';
 
@@ -25,11 +25,11 @@ import {
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // Institution admin portal login
+  /** [AUTH] Unified login — all roles, branches only on totpEnabled. */
   @Public()
   @Post('login')
-  adminLogin(@Body() dto: AdminLoginDto, @Req() req: Request) {
-    return this.authService.adminLogin(dto, req);
+  login(@Body() dto: UnifiedLoginDto, @Req() req: Request) {
+    return this.authService.login(dto, req);
   }
 
   //veify the setup token sent to the admin email during institution provisioning
@@ -96,7 +96,7 @@ export class AuthController {
 
   @Get('me')
   me(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.getProfile(user.id, user.institutionId);
+    return this.authService.getProfile(user.id);
   }
 
   @Post('change-password')
@@ -107,7 +107,6 @@ export class AuthController {
   ) {
     return this.authService.changePassword(
       user.id,
-      user.institutionId,
       dto.currentPassword,
       dto.newPassword,
       req,
@@ -154,7 +153,10 @@ export class AuthController {
   /**
    * Standard logout for current device.
    * Supports optional refreshToken in body for cases where access is already invalid.
+   * Marked public so clients can logout using refresh token alone (e.g. expired access token,
+   * or cross-auth flows like super-admin tokens).
    */
+  @Public()
   @Post('logout')
   logout(
     @CurrentUser() user: AuthenticatedUser | undefined,

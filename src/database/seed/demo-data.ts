@@ -5,6 +5,7 @@ import {
   hashToken,
 } from '../../common/utils/crypto.util';
 import { DrizzleDB } from '../drizzle';
+import { Role } from '../../common/rbac/role.enum';
 import {
   accountSetupTokens,
   attachments,
@@ -16,11 +17,9 @@ import {
   messageThreads,
   notifications,
   otps,
-  roles,
   sessions,
   users,
 } from '../schema';
-import { DEFAULT_ROLES } from './default-roles';
 import {
   DEMO_DEFAULT_PASSWORD,
   DEMO_DEPARTMENTS,
@@ -52,12 +51,10 @@ async function resolvePassword(pendingSetup?: boolean): Promise<string> {
 export async function seedDemoData(db: DrizzleDB) {
   const password = await resolvePassword();
   const institutionId = await ensureInstitution(db);
-  const roleIds = await ensureRoles(db, institutionId);
   const departmentIds = await ensureDepartments(db, institutionId);
   const userIds = await ensureUsers(
     db,
     institutionId,
-    roleIds,
     departmentIds,
     password,
   );
@@ -65,13 +62,7 @@ export async function seedDemoData(db: DrizzleDB) {
   await ensureAccountSetupToken(db, institutionId, userIds);
   await ensureSession(db, userIds);
   await ensureOtp(db, institutionId);
-  const memoIds = await ensureMemos(
-    db,
-    institutionId,
-    userIds,
-    roleIds,
-    departmentIds,
-  );
+  const memoIds = await ensureMemos(db, institutionId, userIds, departmentIds);
   await ensureMemoRecipients(db, memoIds, userIds);
   await ensureAttachments(db, memoIds, userIds);
   await ensureNotifications(db, institutionId, memoIds, userIds);
@@ -109,34 +100,6 @@ async function ensureInstitution(db: DrizzleDB): Promise<string> {
 
   console.log(`  institution: created (${DEMO_INSTITUTION.name})`);
   return created.id;
-}
-
-async function ensureRoles(
-  db: DrizzleDB,
-  institutionId: string,
-): Promise<IdMap> {
-  const existing = await db
-    .select({ id: roles.id, name: roles.name })
-    .from(roles)
-    .where(eq(roles.institutionId, institutionId));
-
-  if (existing.length > 0) {
-    console.log(`  roles: ${existing.length} exist`);
-    return Object.fromEntries(existing.map((r) => [r.name, r.id]));
-  }
-
-  const inserted = await db
-    .insert(roles)
-    .values(
-      DEFAULT_ROLES.map((role) => ({
-        ...role,
-        institutionId,
-      })),
-    )
-    .returning({ id: roles.id, name: roles.name });
-
-  console.log(`  roles: created ${inserted.length}`);
-  return Object.fromEntries(inserted.map((r) => [r.name, r.id]));
 }
 
 async function ensureDepartments(
@@ -181,27 +144,16 @@ async function ensureDepartments(
 async function ensureUsers(
   db: DrizzleDB,
   institutionId: string,
-  roleIds: IdMap,
   departmentIds: IdMap,
   defaultPasswordHash: string,
 ): Promise<IdMap> {
   const ids: IdMap = {};
 
   for (const fixture of DEMO_USERS) {
-    const roleId = roleIds[fixture.roleName];
-    if (!roleId) {
-      throw new Error(`Role not found for seed user: ${fixture.roleName}`);
-    }
-
     const [existing] = await db
       .select({ id: users.id })
       .from(users)
-      .where(
-        and(
-          eq(users.institutionId, institutionId),
-          eq(users.email, fixture.email.toLowerCase()),
-        ),
-      )
+      .where(eq(users.email, fixture.email.toLowerCase()))
       .limit(1);
 
     const passwordHash = fixture.pendingSetup
@@ -221,7 +173,7 @@ async function ensureUsers(
       .insert(users)
       .values({
         institutionId,
-        roleId,
+        role: fixture.role,
         departmentId,
         firstName: fixture.firstName,
         lastName: fixture.lastName,
@@ -305,7 +257,6 @@ async function ensureSession(db: DrizzleDB, userIds: IdMap) {
   }
 
   await db.insert(sessions).values({
-    actorType: 'user',
     userId,
     tokenHash,
     deviceName: 'Seed Demo Browser',
@@ -354,7 +305,6 @@ async function ensureMemos(
   db: DrizzleDB,
   institutionId: string,
   userIds: IdMap,
-  roleIds: IdMap,
   departmentIds: IdMap,
 ): Promise<IdMap> {
   const ids: IdMap = {};
@@ -384,8 +334,8 @@ async function ensureMemos(
     let targetPayload: Record<string, unknown> = {};
     if (memo.targetType === 'department' && 'departmentCode' in memo) {
       targetPayload = { department_ids: [departmentIds[memo.departmentCode]] };
-    } else if (memo.targetType === 'role' && 'roleName' in memo) {
-      targetPayload = { role_ids: [roleIds[memo.roleName]] };
+    } else if (memo.targetType === 'role' && 'role' in memo) {
+      targetPayload = { roles: [memo.role] };
     }
 
     const sentAt = memo.status === 'sent' ? daysAgo(2) : undefined;

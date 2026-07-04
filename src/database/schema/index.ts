@@ -1,7 +1,5 @@
 export * from './enums';
-export * from './super-admins';
 export * from './institutions';
-export * from './roles';
 export * from './users';
 export * from './account-setup-tokens';
 export * from './departments';
@@ -13,7 +11,4 @@ export * from './attachments';
 export * from './notifications';
 export * from './message-threads';
 export * from './audit-logs';
-export * from './permissions';
-export * from './role-permissions';
-export * from './super-admin-permissions';
 export * from './relations';

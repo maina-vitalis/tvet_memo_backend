@@ -9,7 +9,6 @@ import {
   DEMO_USERS,
 } from './fixtures';
 import { seedSuperAdmin } from './super-admin.seed';
-import { seedPermissions } from './permissions.seed';
 
 function printSummary() {
   const password =
@@ -18,7 +17,7 @@ function printSummary() {
   console.log('\n--- Seed summary ---');
   console.log('Tables populated:');
   console.log(
-    '  super_admin, institution, role, department, user, account_setup_token,',
+    '  users (unified), institution, department, account_setup_token,',
   );
   console.log(
     '  session, otp, memo, memo_recipient, attachment, notification,',
@@ -52,9 +51,6 @@ async function seed() {
 
   console.log('[super_admin]');
   await seedSuperAdmin(db);
-
-  console.log('[permissions]');
-  await seedPermissions(db);
 
   console.log('\n[demo data]');
   await seedDemoData(db);

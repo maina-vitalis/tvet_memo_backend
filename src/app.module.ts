@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ClsModule } from 'nestjs-cls';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
@@ -14,9 +15,7 @@ import { DepartmentsModule } from './modules/departments/departments.module';
 import { InstitutionsModule } from './modules/institutions/institutions.module';
 import { MemosModule } from './modules/memos/memos.module';
 import { MailModule } from './modules/mail/mail.module';
-import { RolesModule } from './modules/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
-import { SuperAdminAuthModule } from './modules/super-admin-auth/super-admin-auth.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { RedisModule } from './common/redis/redis.module';
 
@@ -27,18 +26,19 @@ import { RedisModule } from './common/redis/redis.module';
       load: [configuration],
       validate,
     }),
+    ClsModule.forRoot({
+      global: true,
+      middleware: { mount: true },
+    }),
     DatabaseModule,
     AuditModule,
     AuthModule,
     MailModule,
     InstitutionsModule,
-    RolesModule,
     DepartmentsModule,
     UsersModule,
     MemosModule,
-    SuperAdminAuthModule,
     AdminModule,
-    RolesModule,
     RedisModule,
   ],
   controllers: [HealthController],

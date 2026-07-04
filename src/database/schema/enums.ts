@@ -57,7 +57,16 @@ export const institutionStatusEnum = pgEnum('institution_status', [
   'suspended',
 ]);
 
-export const sessionActorTypeEnum = pgEnum('session_actor_type', [
-  'user',
-  'super_admin',
+/** [RBAC] Fixed user roles — no dynamic roles table. */
+export const roleEnum = pgEnum('user_role', [
+  'SUPER_ADMIN',
+  'CHAIRPERSON',
+  'BOARD_MEMBER',
+  'PRINCIPAL',
+  'DEPUTY_PRINCIPAL_ACADEMICS',
+  'DEPUTY_PRINCIPAL_ADMIN',
+  'INSTITUTION_ADMIN',
+  'HOD',
+  'TRAINER',
+  'TRAINEE',
 ]);

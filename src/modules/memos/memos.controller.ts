@@ -1,8 +1,9 @@
 import { Body, Controller, Get, Param, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { RequirePermission } from '../../common/decorators/require-permission.decorator';
+import { RequirePermissions } from '../../common/decorators/require-permission.decorator';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { Permission } from '../../common/rbac/permission.enum';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import {
   AcknowledgeMemoDto,
@@ -17,23 +18,23 @@ export class MemosController {
 
   @Get('sent')
   findSent(@CurrentUser() user: AuthenticatedUser) {
-    return this.memosService.findSent(user.institutionId, user.id);
+    return this.memosService.findSent(user.institutionId!, user.id);
   }
 
   @Get('inbox')
   findInbox(@CurrentUser() user: AuthenticatedUser) {
-    return this.memosService.findInbox(user.institutionId, user.id);
+    return this.memosService.findInbox(user.institutionId!, user.id);
   }
 
   @Get(':id')
   findOne(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.memosService.findOne(user.institutionId, id);
+    return this.memosService.findOne(user.institutionId!, id);
   }
 
   // Creating a memo draft is relatively open
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateMemoDto) {
-    return this.memosService.create(user.institutionId, user.id, dto);
+    return this.memosService.create(user.institutionId!, user.id, dto);
   }
 
   @Patch(':id')
@@ -42,24 +43,24 @@ export class MemosController {
     @Param('id') id: string,
     @Body() dto: UpdateMemoDto,
   ) {
-    return this.memosService.update(user.institutionId, user.id, id, dto);
+    return this.memosService.update(user.institutionId!, user.id, id, dto);
   }
 
   // Sending requires explicit permission
   @UseGuards(PermissionsGuard)
-  @RequirePermission('tenant.memos.send')
+  @RequirePermissions(Permission.BROADCAST_MEMO)
   @Post(':id/send')
   send(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Req() req: Request,
   ) {
-    return this.memosService.send(user.institutionId, user.id, id, req);
+    return this.memosService.send(user.institutionId!, user.id, id, req);
   }
 
   @Post(':id/read')
   markRead(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.memosService.markRead(user.institutionId, user.id, id);
+    return this.memosService.markRead(user.institutionId!, user.id, id);
   }
 
   @Post(':id/acknowledge')
@@ -68,6 +69,6 @@ export class MemosController {
     @Param('id') id: string,
     @Body() dto: AcknowledgeMemoDto,
   ) {
-    return this.memosService.acknowledge(user.institutionId, user.id, id, dto);
+    return this.memosService.acknowledge(user.institutionId!, user.id, id, dto);
   }
 }

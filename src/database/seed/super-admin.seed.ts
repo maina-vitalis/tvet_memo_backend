@@ -1,8 +1,10 @@
 import * as argon2 from 'argon2';
 import { eq } from 'drizzle-orm';
+import { Role } from '../../common/rbac/role.enum';
 import { DrizzleDB } from '../drizzle';
-import { superAdmins } from '../schema';
+import { users } from '../schema';
 
+/** [AUTH] Seeds the platform SUPER_ADMIN in the unified users table. */
 export async function seedSuperAdmin(db: DrizzleDB) {
   const email = process.env.SUPER_ADMIN_EMAIL;
   const password = process.env.SUPER_ADMIN_PASSWORD;
@@ -18,9 +20,9 @@ export async function seedSuperAdmin(db: DrizzleDB) {
   const normalizedEmail = email.toLowerCase();
 
   const [existing] = await db
-    .select({ id: superAdmins.id })
-    .from(superAdmins)
-    .where(eq(superAdmins.email, normalizedEmail))
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   if (existing) {
@@ -30,11 +32,14 @@ export async function seedSuperAdmin(db: DrizzleDB) {
 
   const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
 
-  await db.insert(superAdmins).values({
+  await db.insert(users).values({
     email: normalizedEmail,
     firstName,
     lastName,
     passwordHash,
+    role: Role.SUPER_ADMIN,
+    institutionId: null,
+    mustChangePassword: false,
   });
 
   console.log(`  super_admin: created (${normalizedEmail})`);

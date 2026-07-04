@@ -1,15 +1,14 @@
 import { SetMetadata } from '@nestjs/common';
+import { Permission } from '../rbac/permission.enum';
 
 export const PERMISSIONS_KEY = 'permissions';
 
 /**
- * @RequirePermission('tenant.users.manage')
- *
- * Use together with:
- * @UseGuards(PermissionsGuard)
- *
- * Works for both tenant users and super admins because both
- * carry a `permissions: string[]` array after successful auth.
+ * [RBAC] Declares required permissions for a route.
+ * Use with PermissionsGuard — checks ROLE_PERMISSIONS[request.user.role].
  */
-export const RequirePermission = (...permissions: string[]) =>
+export const RequirePermissions = (...permissions: Permission[]) =>
   SetMetadata(PERMISSIONS_KEY, permissions);
+
+/** @deprecated Use RequirePermissions — kept for incremental migration. */
+export const RequirePermission = RequirePermissions;

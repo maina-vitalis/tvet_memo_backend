@@ -1,27 +1,23 @@
+import { Role } from '../rbac/role.enum';
+
+/** [AUTH] JWT payload — minimal claims; permissions resolved from ROLE_PERMISSIONS at guard time. */
 export interface JwtPayload {
   sub: string;
   jti: string;
-  institutionId: string;
-  roleId: string;
-  departmentId: string | null;
-  email: string;
-  firstName: string;
-  lastName: string;
-  mustChangePassword: boolean;
-  // Future: we can embed permission keys if payload size allows
-  // permissions?: string[];
+  role: Role;
+  institutionId: string | null;
 }
 
+/** [AUTH] User attached to request after JwtStrategy validates the token. */
 export interface AuthenticatedUser {
   id: string;
   sessionId: string;
-  institutionId: string;
-  roleId: string;
-  departmentId: string | null;
+  role: Role;
+  institutionId: string | null;
   email: string;
   firstName: string;
   lastName: string;
+  departmentId: string | null;
+  cohortId: string | null;
   mustChangePassword: boolean;
-  // Populated by RBAC layer
-  permissions?: string[];
 }

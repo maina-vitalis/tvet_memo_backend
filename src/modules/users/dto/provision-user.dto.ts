@@ -1,6 +1,8 @@
 import { Transform } from 'class-transformer';
+import { Role } from '../../../common/rbac/role.enum';
 import {
   IsEmail,
+  IsEnum,
   IsOptional,
   IsString,
   IsUUID,
@@ -27,8 +29,8 @@ export class ProvisionUserDto {
   )
   email!: string;
 
-  @IsUUID()
-  roleId!: string;
+  @IsEnum(Role)
+  role!: Role;
 
   @IsUUID()
   @IsOptional()
