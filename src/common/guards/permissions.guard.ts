@@ -8,7 +8,6 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/require-permission.decorator';
 import { Permission } from '../rbac/permission.enum';
 import { ROLE_PERMISSIONS } from '../rbac/role-permissions';
-import { Role } from '../rbac/role.enum';
 import { AuthenticatedUser } from '../types/auth-user.type';
 
 /** [RBAC] Checks ROLE_PERMISSIONS[request.user.role] against @RequirePermissions(...). */
@@ -22,11 +21,15 @@ export class PermissionsGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
+    console.log('metadata', required);
+
     if (!required || required.length === 0) {
       return true;
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const request = context.switchToHttp().getRequest();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const user = request.user as AuthenticatedUser | undefined;
 
     if (!user?.role) {
@@ -35,7 +38,7 @@ export class PermissionsGuard implements CanActivate {
       );
     }
 
-    const granted = ROLE_PERMISSIONS[user.role as Role] ?? [];
+    const granted = ROLE_PERMISSIONS[user.role] ?? [];
     const hasAll = required.every((p) => granted.includes(p));
 
     if (!hasAll) {
