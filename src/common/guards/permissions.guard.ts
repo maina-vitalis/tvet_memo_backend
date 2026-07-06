@@ -8,7 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/require-permission.decorator';
 import { Permission } from '../rbac/permission.enum';
 import { ROLE_PERMISSIONS } from '../rbac/role-permissions';
-import { AuthenticatedUser } from '../types/auth-user.type';
+import { Request } from 'express';
 
 /** [RBAC] Checks ROLE_PERMISSIONS[request.user.role] against @RequirePermissions(...). */
 @Injectable()
@@ -27,10 +27,8 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const request = context.switchToHttp().getRequest();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    const user = request.user as AuthenticatedUser | undefined;
+    const request = context.switchToHttp().getRequest<Request>();
+    const user = request.user;
 
     if (!user?.role) {
       throw new ForbiddenException(

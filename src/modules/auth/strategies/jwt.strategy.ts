@@ -35,6 +35,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     payload: JwtPayload,
   ): Promise<AuthenticatedUser> {
     const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
+    console.log(payload);
 
     if (!token || !payload.jti) {
       throw new UnauthorizedException('Invalid token');

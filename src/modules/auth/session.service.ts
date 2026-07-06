@@ -227,12 +227,14 @@ export class SessionService {
       tokenHash?: string;
     }>(`session:${sessionId}`);
 
+    console.log(redisSession);
+
     if (redisSession) {
       if (redisSession.isActive !== true) {
-        throw new UnauthorizedException('Session expired or revoked');
+        throw new UnauthorizedException('Session expired or revoked maina');
       }
       if (redisSession.tokenHash !== hashToken(token)) {
-        throw new UnauthorizedException('Session expired or revoked');
+        throw new UnauthorizedException('Session expired or revoked gikonyo');
       }
       return;
     }
