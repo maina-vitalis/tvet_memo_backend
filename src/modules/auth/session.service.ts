@@ -72,7 +72,12 @@ export class SessionService {
       0,
       Math.floor((accessExpiresAt.getTime() - Date.now()) / 1000),
     );
-    await this.redisService.setJson(`session:${params.sessionId}`, values, ttl || undefined);
+
+    await this.redisService.setJson(
+      `session:${params.sessionId}`,
+      values,
+      ttl || undefined,
+    );
 
     const refreshTtl = Math.max(
       0,
@@ -87,6 +92,7 @@ export class SessionService {
     return { sessionId: params.sessionId, refreshToken };
   }
 
+  //new access token
   async rotateAndIssueNewAccess(input: RefreshTokenInput): Promise<{
     session: Session;
     newSessionId: string;
@@ -258,7 +264,11 @@ export class SessionService {
       Math.floor((dbSession.expiresAt.getTime() - Date.now()) / 1000),
     );
     if (cacheTtl > 0) {
-      await this.redisService.setJson(`session:${sessionId}`, dbSession, cacheTtl);
+      await this.redisService.setJson(
+        `session:${sessionId}`,
+        dbSession,
+        cacheTtl,
+      );
     }
   }
 

@@ -19,7 +19,10 @@ async function main() {
   console.log('Shortcode:', AUTH_TEST_INSTITUTION.schoolCode);
   console.log('Student email:', AUTH_TEST_TRAINEE.email);
   console.log('Admission number:', AUTH_TEST_TRAINEE.admissionNumber);
-  console.log('Default password (registry login):', AUTH_TEST_TRAINEE.admissionNumber);
+  console.log(
+    'Default password (registry login):',
+    AUTH_TEST_TRAINEE.admissionNumber,
+  );
   console.log('\nEndpoints:');
   console.log('  POST /auth/login/registry');
   console.log('  POST /auth/login/email/initiate');

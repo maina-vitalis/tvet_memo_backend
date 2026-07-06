@@ -395,7 +395,7 @@ export class AuthService {
       return { requiresTotp: true, userId: user.id };
     }
 
-    if (user.role !== Role.SUPER_ADMIN) {
+    if ((user.role as Role) !== Role.SUPER_ADMIN) {
       const setupPending = await this.institutionsService.hasPendingSetup(
         user.id,
       );
@@ -636,16 +636,17 @@ export class AuthService {
 
     const accessToken = await this.jwtService.signAsync(payload);
 
-    const { refreshToken } = await this.sessionService.persistSessionAfterSigning({
-      sessionId,
-      userId: user.id,
-      accessToken,
-      deviceId: dto.deviceId,
-      deviceName: dto.deviceName,
-      deviceType: dto.deviceType ?? 'web',
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent') ?? undefined,
-    });
+    const { refreshToken } =
+      await this.sessionService.persistSessionAfterSigning({
+        sessionId,
+        userId: user.id,
+        accessToken,
+        deviceId: dto.deviceId,
+        deviceName: dto.deviceName,
+        deviceType: dto.deviceType ?? 'web',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent') ?? undefined,
+      });
 
     if (user.institutionId) {
       await this.auditService.log({
@@ -712,7 +713,9 @@ export class AuthService {
    * Keeps the response lightweight and safe (no secret material).
    */
   async getActiveSessions(user: AuthenticatedUser) {
-    const sessions = await this.sessionService.findActiveSessionsForUser(user.id);
+    const sessions = await this.sessionService.findActiveSessionsForUser(
+      user.id,
+    );
 
     return sessions.map((s) => ({
       ...s,
@@ -750,7 +753,11 @@ export class AuthService {
    * Revoke one specific session/device.
    * Security: ensure the session belongs to the caller.
    */
-  async logoutSpecificSession(user: AuthenticatedUser, sessionId: string, req: Request) {
+  async logoutSpecificSession(
+    user: AuthenticatedUser,
+    sessionId: string,
+    req: Request,
+  ) {
     // We fetch to verify ownership (lightweight)
     const active = await this.sessionService.findActiveSessionsForUser(user.id);
     const target = active.find((s) => s.id === sessionId);
