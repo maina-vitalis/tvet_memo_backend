@@ -4,7 +4,6 @@ export * from './users';
 export * from './account-setup-tokens';
 export * from './departments';
 export * from './sessions';
-export * from './otps';
 export * from './memos';
 export * from './memo-recipients';
 export * from './attachments';

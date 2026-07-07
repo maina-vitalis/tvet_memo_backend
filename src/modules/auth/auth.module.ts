@@ -7,6 +7,7 @@ import { EmailModule } from '../email/email.module';
 import { InstitutionsModule } from '../institutions/institutions.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { OtpModule } from './otp.module';
 import { SessionModule } from './session.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
@@ -15,6 +16,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     AuditModule,
     EmailModule,
     InstitutionsModule,
+    OtpModule,
     SessionModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({

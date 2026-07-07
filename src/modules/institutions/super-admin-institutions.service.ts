@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { desc, eq, inArray } from 'drizzle-orm';
+import { count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { Role } from '../../common/rbac/role.enum';
@@ -19,7 +19,6 @@ import {
   attachments,
   messageThreads,
   notifications,
-  otps,
   auditLogs,
   memos,
   departments,
@@ -30,6 +29,7 @@ import {
   hashToken,
   sanitizeUser,
 } from '../../common/utils/crypto.util';
+import { OtpService } from '../auth/otp.service';
 import { MailService } from '../mail/mail.service';
 import {
   ProvisionInitialStatus,
@@ -52,6 +52,7 @@ export class SuperAdminInstitutionsService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly configService: ConfigService,
     private readonly mailService: MailService,
+    private readonly otpService: OtpService,
   ) {}
 
   //provisioning the instittuion and the admin
@@ -151,12 +152,24 @@ export class SuperAdminInstitutionsService {
     };
   }
 
-  //get all institutions in the system for super admin
+  //get all institutions in the system for super admin, with real user counts
   async findAll() {
-    return this.db
-      .select()
+    const rows = await this.db
+      .select({
+        institution: institutions,
+        usersActive: count(users.id),
+        seatsActive: count(sql`CASE WHEN ${users.isActive} THEN 1 END`),
+      })
       .from(institutions)
+      .leftJoin(users, eq(users.institutionId, institutions.id))
+      .groupBy(institutions.id)
       .orderBy(desc(institutions.createdAt));
+
+    return rows.map((row) => ({
+      ...row.institution,
+      usersActive: Number(row.usersActive),
+      seatsActive: Number(row.seatsActive),
+    }));
   }
 
   //update institution details for super admin
@@ -224,9 +237,6 @@ export class SuperAdminInstitutionsService {
       // Delete notifications for this institution
       await tx.delete(notifications).where(eq(notifications.institutionId, id));
 
-      // Delete otps for this institution
-      await tx.delete(otps).where(eq(otps.institutionId, id));
-
       // Delete setup tokens
       await tx
         .delete(accountSetupTokens)
@@ -247,6 +257,8 @@ export class SuperAdminInstitutionsService {
       // Finally, delete the institution
       await tx.delete(institutions).where(eq(institutions.id, id));
     });
+
+    await this.otpService.purgeForInstitution(id);
 
     return { success: true, message: 'Institution deleted successfully' };
   }

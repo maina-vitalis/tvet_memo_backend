@@ -12,12 +12,7 @@ import { Request } from 'express';
 import { Role } from '../../common/rbac/role.enum';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import {
-  accountSetupTokens,
-  institutions,
-  otps,
-  users,
-} from '../../database/schema';
+import { accountSetupTokens, institutions, users } from '../../database/schema';
 import {
   generateOtp,
   generateSessionId,
@@ -54,6 +49,7 @@ import {
   ValidateEmailOtpDto,
 } from './dto/login.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
+import { OtpService } from './otp.service';
 import { SessionService } from './session.service';
 
 @Injectable()
@@ -66,6 +62,7 @@ export class AuthService {
     private readonly sessionService: SessionService,
     private readonly emailService: EmailService,
     private readonly institutionsService: InstitutionsService,
+    private readonly otpService: OtpService,
   ) {}
 
   // Email flow - Step 1: send OTP after institution discovery
@@ -103,7 +100,6 @@ export class AuthService {
     }
 
     const code = generateOtp();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
     try {
       await this.emailService.sendVerificationCode(
@@ -115,12 +111,7 @@ export class AuthService {
       return { message: 'If this email exists, an OTP has been sent' };
     }
 
-    await this.db.insert(otps).values({
-      institutionId: dto.institutionId,
-      email,
-      code,
-      expiresAt,
-    });
+    await this.otpService.issueEmailOtp(dto.institutionId, email, code);
 
     return { message: 'If this email exists, an OTP has been sent' };
   }
@@ -172,13 +163,13 @@ export class AuthService {
 
   //validate OTP
   async validateEmailOtp(dto: ValidateEmailOtpDto) {
-    const otp = await this.findValidEmailOtp(
+    const verified = await this.otpService.checkEmailOtp(
       dto.institutionId,
       dto.email,
       dto.otp,
     );
 
-    if (!otp) {
+    if (!verified) {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
@@ -260,9 +251,13 @@ export class AuthService {
 
   async completeEmailSetup(dto: CompleteEmailSetupDto, req: Request) {
     const email = dto.email.toLowerCase();
-    const otp = await this.findValidEmailOtp(dto.institutionId, email, dto.otp);
+    const verified = await this.otpService.consumeEmailOtp(
+      dto.institutionId,
+      email,
+      dto.otp,
+    );
 
-    if (!otp) {
+    if (!verified) {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
@@ -303,8 +298,6 @@ export class AuthService {
       .where(eq(users.id, user.id))
       .returning();
 
-    await this.db.update(otps).set({ used: true }).where(eq(otps.id, otp.id));
-
     const session = await this.createSession(updatedUser, dto, req);
 
     await this.auditService.log({
@@ -323,7 +316,6 @@ export class AuthService {
   // Email flow - Step 2: verify OTP and sign in
   async emailLogin(dto: EmailLoginDto, req: Request) {
     const email = dto.email.toLowerCase();
-    const now = new Date();
 
     const [institution] = await this.db
       .select({ id: institutions.id, isActive: institutions.isActive })
@@ -335,24 +327,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
 
-    const [otp] = await this.db
-      .select()
-      .from(otps)
-      .where(
-        and(
-          eq(otps.institutionId, dto.institutionId),
-          eq(otps.email, email),
-          eq(otps.code, dto.otp),
-          eq(otps.used, false),
-        ),
-      )
-      .limit(1);
+    const verified = await this.otpService.consumeEmailOtp(
+      dto.institutionId,
+      email,
+      dto.otp,
+    );
 
-    if (!otp || otp.expiresAt < now) {
+    if (!verified) {
       throw new UnauthorizedException('Invalid or expired OTP');
     }
-
-    await this.db.update(otps).set({ used: true }).where(eq(otps.id, otp.id));
 
     const [user] = await this.db
       .select()
@@ -541,33 +524,6 @@ export class AuthService {
     }
 
     return this.createSession(user, dto, req);
-  }
-
-  private async findValidEmailOtp(
-    institutionId: string,
-    email: string,
-    code: string,
-  ) {
-    const now = new Date();
-
-    const [otp] = await this.db
-      .select()
-      .from(otps)
-      .where(
-        and(
-          eq(otps.institutionId, institutionId),
-          eq(otps.email, email.toLowerCase()),
-          eq(otps.code, code),
-          eq(otps.used, false),
-        ),
-      )
-      .limit(1);
-
-    if (!otp || otp.expiresAt < now) {
-      return null;
-    }
-
-    return otp;
   }
 
   private async findValidSetupToken(token: string) {
