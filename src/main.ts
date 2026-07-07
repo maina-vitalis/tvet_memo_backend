@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import morgan from 'morgan';
 
@@ -47,6 +48,9 @@ async function bootstrap() {
   });
 
   app.setGlobalPrefix('api/v1');
+  // cookie-parser must be registered before morgan (and before the JWT strategy
+  // fires) so Express populates req.cookies for HttpOnly cookie extraction.
+  app.use(cookieParser());
   app.use(morgan('dev'));
 
   app.useGlobalPipes(

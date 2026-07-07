@@ -43,8 +43,7 @@ async function resolvePassword(pendingSetup?: boolean): Promise<string> {
   if (pendingSetup) {
     return getLockedPasswordHash();
   }
-  const plain =
-    process.env[DEMO_PASSWORD_ENV]?.trim() || DEMO_DEFAULT_PASSWORD;
+  const plain = process.env[DEMO_PASSWORD_ENV]?.trim() || DEMO_DEFAULT_PASSWORD;
   return argon2.hash(plain, { type: argon2.argon2id });
 }
 
@@ -52,12 +51,7 @@ export async function seedDemoData(db: DrizzleDB) {
   const password = await resolvePassword();
   const institutionId = await ensureInstitution(db);
   const departmentIds = await ensureDepartments(db, institutionId);
-  const userIds = await ensureUsers(
-    db,
-    institutionId,
-    departmentIds,
-    password,
-  );
+  const userIds = await ensureUsers(db, institutionId, departmentIds, password);
   await assignDepartmentHeads(db, userIds, departmentIds);
   await ensureAccountSetupToken(db, institutionId, userIds);
   await ensureSession(db, userIds);
@@ -381,7 +375,11 @@ async function ensureMemos(
   return ids;
 }
 
-async function ensureMemoRecipients(db: DrizzleDB, memoIds: IdMap, userIds: IdMap) {
+async function ensureMemoRecipients(
+  db: DrizzleDB,
+  memoIds: IdMap,
+  userIds: IdMap,
+) {
   const welcomeMemoId = memoIds['welcome'];
   const traineeIds = [userIds['trainee-1'], userIds['trainee-2']].filter(
     Boolean,

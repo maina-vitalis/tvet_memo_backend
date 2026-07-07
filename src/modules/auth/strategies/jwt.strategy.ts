@@ -23,7 +23,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Mobile sends Authorization: Bearer <token>.
+      // Web admin (via BFF) sends the token in an HttpOnly cookie set server-side.
+      // The extractor chain tries Bearer first so mobile is never affected.
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        (req: Request) => req?.cookies?.['memo_access'] ?? null,
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('jwt.secret'),
       passReqToCallback: true,
@@ -34,8 +40,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     req: Request,
     payload: JwtPayload,
   ): Promise<AuthenticatedUser> {
-    const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
-    console.log(payload);
+    // Mirror the extractor priority: Bearer first, then HttpOnly cookie.
+    const token =
+      ExtractJwt.fromAuthHeaderAsBearerToken()(req) ??
+      (req.cookies?.['memo_access'] as string | undefined) ??
+      null;
 
     if (!token || !payload.jti) {
       throw new UnauthorizedException('Invalid token');

@@ -170,6 +170,7 @@ export class AuthService {
     };
   }
 
+  //validate OTP
   async validateEmailOtp(dto: ValidateEmailOtpDto) {
     const otp = await this.findValidEmailOtp(
       dto.institutionId,
