@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomInt, randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
 
 const LOCKED_PASSWORD_SENTINEL = '__ACCOUNT_SETUP_PENDING__';
@@ -38,20 +38,9 @@ export function generateDeviceId(): string {
   return randomUUID();
 }
 
-const MOCK_OTP_CODE = '123456';
-
 export function generateOtp(): string {
-  const configuredMockOtp = process.env.MOCK_OTP_CODE?.trim();
-
-  if (configuredMockOtp) {
-    return configuredMockOtp;
-  }
-
-  if (process.env.NODE_ENV === 'development') {
-    return MOCK_OTP_CODE;
-  }
-
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  // Cryptographically secure, uniformly distributed 6-digit code (100000-999999).
+  return randomInt(100000, 1000000).toString();
 }
 
 export function generateTemporaryPassword(length = 12): string {
