@@ -5,12 +5,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, ilike, inArray, or } from 'drizzle-orm';
 import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { memoRecipients, memos, users } from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
+import { Role } from '../../common/rbac/role.enum';
+import { ROLE_RANK } from '../../common/rbac/role-rank';
 import {
   AcknowledgeMemoDto,
   CreateMemoDto,
@@ -68,6 +70,12 @@ export class MemosService {
   }
 
   async create(institutionId: string, senderId: string, dto: CreateMemoDto) {
+    await this.assertTargetPayloadAllowed(
+      senderId,
+      dto.targetType,
+      dto.targetPayload,
+    );
+
     const [memo] = await this.db
       .insert(memos)
       .values({
@@ -105,6 +113,14 @@ export class MemosService {
     if (!['draft', 'scheduled'].includes(memo.status)) {
       throw new BadRequestException(
         'Only draft or scheduled memos can be edited',
+      );
+    }
+
+    if (dto.targetType || dto.targetPayload) {
+      await this.assertTargetPayloadAllowed(
+        senderId,
+        (dto.targetType ?? memo.targetType) as MemoTargetTypeDto,
+        dto.targetPayload ?? (memo.targetPayload as Record<string, unknown>),
       );
     }
 
@@ -147,7 +163,11 @@ export class MemosService {
       throw new BadRequestException('Memo has already been sent');
     }
 
-    const recipientIds = await this.resolveRecipients(institutionId, memo);
+    const recipientIds = await this.resolveRecipients(
+      institutionId,
+      memo,
+      senderId,
+    );
 
     if (recipientIds.length === 0) {
       throw new BadRequestException(
@@ -269,9 +289,120 @@ export class MemosService {
     return updated;
   }
 
+  async findTargetableUsers(
+    institutionId: string,
+    actor: { role: Role },
+    query?: string,
+  ) {
+    const actorRank = ROLE_RANK[actor.role];
+    const allowedRoles = Object.values(Role).filter(
+      (role) => role !== Role.SUPER_ADMIN && ROLE_RANK[role] <= actorRank,
+    );
+
+    const conditions = [
+      eq(users.institutionId, institutionId),
+      eq(users.isActive, true),
+      inArray(users.role, allowedRoles),
+    ];
+
+    if (query?.trim()) {
+      const search = `%${query.trim()}%`;
+      conditions.push(
+        or(
+          ilike(users.firstName, search),
+          ilike(users.lastName, search),
+          ilike(users.email, search),
+        )!,
+      );
+    }
+
+    return this.db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+        role: users.role,
+        departmentId: users.departmentId,
+      })
+      .from(users)
+      .where(and(...conditions))
+      .limit(50);
+  }
+
+  private async assertTargetPayloadAllowed(
+    senderId: string,
+    targetType: MemoTargetTypeDto,
+    targetPayload?: Record<string, unknown>,
+  ) {
+    if (targetType !== MemoTargetTypeDto.ROLE) {
+      return;
+    }
+
+    const [sender] = await this.db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, senderId))
+      .limit(1);
+
+    if (!sender) {
+      throw new ForbiddenException('Sender not found');
+    }
+
+    const senderRank = ROLE_RANK[sender.role as Role];
+    const targetRoles = ((targetPayload?.roles as Role[]) ?? []).filter(
+      Boolean,
+    );
+
+    for (const role of targetRoles) {
+      if (ROLE_RANK[role] > senderRank) {
+        throw new ForbiddenException(
+          `Cannot target role ${role} — it is above your rank`,
+        );
+      }
+    }
+  }
+
+  private async filterRecipientsBySenderRank(
+    institutionId: string,
+    senderId: string,
+    recipientIds: string[],
+  ): Promise<string[]> {
+    if (!recipientIds.length) {
+      return [];
+    }
+
+    const [sender] = await this.db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.id, senderId))
+      .limit(1);
+
+    if (!sender) {
+      throw new ForbiddenException('Sender not found');
+    }
+
+    const senderRank = ROLE_RANK[sender.role as Role];
+    const rows = await this.db
+      .select({ id: users.id, role: users.role })
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, institutionId),
+          inArray(users.id, recipientIds),
+          eq(users.isActive, true),
+        ),
+      );
+
+    return rows
+      .filter((row) => ROLE_RANK[row.role as Role] <= senderRank)
+      .map((row) => row.id);
+  }
+
   private async resolveRecipients(
     institutionId: string,
     memo: typeof memos.$inferSelect,
+    senderId: string,
   ): Promise<string[]> {
     const baseConditions = and(
       eq(users.institutionId, institutionId),
@@ -286,7 +417,11 @@ export class MemosService {
           .select({ id: users.id })
           .from(users)
           .where(baseConditions);
-        return rows.map((r) => r.id);
+        return this.filterRecipientsBySenderRank(
+          institutionId,
+          senderId,
+          rows.map((r) => r.id),
+        );
       }
 
       case MemoTargetTypeDto.DEPARTMENT: {
@@ -302,11 +437,16 @@ export class MemosService {
           .where(
             and(baseConditions, inArray(users.departmentId, departmentIds)),
           );
-        return rows.map((r) => r.id);
+        return this.filterRecipientsBySenderRank(
+          institutionId,
+          senderId,
+          rows.map((r) => r.id),
+        );
       }
 
       case MemoTargetTypeDto.ROLE: {
-        const targetRoles = (payload.roles as (typeof users.$inferSelect.role)[]) ?? [];
+        const targetRoles =
+          (payload.roles as (typeof users.$inferSelect.role)[]) ?? [];
         if (!targetRoles.length) {
           throw new BadRequestException('roles required in target_payload');
         }
@@ -314,7 +454,11 @@ export class MemosService {
           .select({ id: users.id })
           .from(users)
           .where(and(baseConditions, inArray(users.role, targetRoles)));
-        return rows.map((r) => r.id);
+        return this.filterRecipientsBySenderRank(
+          institutionId,
+          senderId,
+          rows.map((r) => r.id),
+        );
       }
 
       case MemoTargetTypeDto.INDIVIDUAL: {
@@ -326,7 +470,11 @@ export class MemosService {
           .select({ id: users.id })
           .from(users)
           .where(and(baseConditions, inArray(users.id, userIds)));
-        return rows.map((r) => r.id);
+        return this.filterRecipientsBySenderRank(
+          institutionId,
+          senderId,
+          rows.map((r) => r.id),
+        );
       }
 
       default:

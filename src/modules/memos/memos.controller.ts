@@ -6,6 +6,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -34,6 +35,20 @@ export class MemosController {
   @Get('inbox')
   findInbox(@CurrentUser() user: AuthenticatedUser) {
     return this.memosService.findInbox(user.institutionId!, user.id);
+  }
+
+  @Get('targetable-users')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.BROADCAST_MEMO)
+  findTargetableUsers(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('q') query?: string,
+  ) {
+    return this.memosService.findTargetableUsers(
+      user.institutionId!,
+      user,
+      query,
+    );
   }
 
   @Get(':id')
