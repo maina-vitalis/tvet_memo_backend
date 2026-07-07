@@ -77,44 +77,107 @@ export class EmailService {
     this.logger.log(`Verification email sent to ${to}`);
   }
 
-  async sendAccountSetupLink(
-    to: string,
-    setupLink: string,
-    firstName: string,
-    institutionName?: string,
-  ): Promise<void> {
+  /**
+   * [PROVISIONING] Send login credentials to a newly provisioned user.
+   *
+   * The user logs in via the mobile app using:
+   *   1. School code  — to locate the institution
+   *   2. Admission / staff number — as their identifier
+   *   3. Temporary password — sent here; they must change it on first login
+   *
+   * No setup link is sent — the mobile app's code-auth flow handles the rest.
+   */
+  async sendProvisioningCredentials(params: {
+    to: string;
+    firstName: string;
+    schoolCode: string;
+    tempPassword: string;
+    /** Admission number (students) or staff number — whichever is their login identifier. */
+    loginIdentifier: string;
+    /** Label shown in the email: 'Admission Number' or 'Staff Number'. */
+    loginIdentifierLabel: 'Admission Number' | 'Staff Number';
+    institutionName?: string;
+  }): Promise<void> {
+    const {
+      to,
+      firstName,
+      schoolCode,
+      tempPassword,
+      loginIdentifier,
+      loginIdentifierLabel,
+      institutionName,
+    } = params;
+    const displayName = institutionName ?? 'TVET Memo';
+
     if (!this.client || !this.senderAddress) {
-      this.logger.log(`Account setup link for ${to}: ${setupLink}`);
+      this.logger.log(
+        `[PROVISIONING] Credentials for ${to} — school code: ${schoolCode}, ${loginIdentifierLabel}: ${loginIdentifier}, password: ${tempPassword}`,
+      );
       return;
     }
 
-    const displayName = institutionName ?? 'TVET Memo';
     const message: EmailMessage = {
       senderAddress: this.senderAddress,
       content: {
-        subject: `${displayName} — Complete your account setup`,
+        subject: `${displayName} — Your account is ready`,
         plainText: [
           `Hi ${firstName},`,
           '',
-          `Your account has been created for ${displayName}.`,
+          `Your account has been created on ${displayName}.`,
           '',
-          'Complete your account setup by clicking the link below:',
-          setupLink,
+          'Use the following credentials to log in on the mobile app:',
           '',
-          'This link expires in 24 hours.',
-          'If you did not request this, please contact your administrator.',
+          `  School Code:            ${schoolCode}`,
+          `  ${loginIdentifierLabel.padEnd(23)} ${loginIdentifier}`,
+          `  Temporary Password:     ${tempPassword}`,
+          '',
+          'Steps to log in:',
+          '  1. Open the TVET Memo mobile app.',
+          '  2. Enter the school code above to find your institution.',
+          `  3. Enter your ${loginIdentifierLabel.toLowerCase()}: ${loginIdentifier}`,
+          '  4. Enter the temporary password above.',
+          '  5. You will be prompted to set a new password on first login.',
+          '',
+          'Keep this email safe. Do not share your password with anyone.',
+          'If you did not expect this email, contact your institution administrator.',
         ].join('\n'),
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
-            <h2 style="color: #1a365d; margin-bottom: 8px;">Welcome to ${displayName}</h2>
-            <p style="color: #4a5568; margin-top: 0;">Hi ${firstName},</p>
-            <p style="color: #4a5568;">Your account has been created. Complete your account setup to get started:</p>
-            <div style="margin: 32px 0;">
-              <a href="${setupLink}" style="display: inline-block; padding: 12px 24px; background-color: #3182ce; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">Complete Account Setup</a>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #ffffff;">
+            <h2 style="color: #1a365d; margin-bottom: 4px;">${displayName}</h2>
+            <p style="color: #718096; font-size: 14px; margin-top: 0;">Account provisioned</p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 16px 0;" />
+
+            <p style="color: #4a5568;">Hi <strong>${firstName}</strong>,</p>
+            <p style="color: #4a5568;">Your account has been created. Use the credentials below to sign in on the mobile app.</p>
+
+            <div style="background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; margin: 24px 0;">
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 8px 0; color: #718096; font-size: 14px; width: 160px;">School Code</td>
+                  <td style="padding: 8px 0; font-size: 18px; font-weight: bold; letter-spacing: 3px; color: #1a365d;">${schoolCode}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #718096; font-size: 14px;">${loginIdentifierLabel}</td>
+                  <td style="padding: 8px 0; font-size: 15px; font-weight: bold; font-family: monospace; color: #2d3748;">${loginIdentifier}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 8px 0; color: #718096; font-size: 14px;">Temporary Password</td>
+                  <td style="padding: 8px 0; font-size: 16px; font-weight: bold; font-family: monospace; color: #2d3748;">${tempPassword}</td>
+                </tr>
+              </table>
             </div>
-            <p style="color: #718096; font-size: 14px;">Or copy and paste this link into your mobile browser:</p>
-            <p style="color: #3182ce; font-size: 14px; word-break: break-all;">${setupLink}</p>
-            <p style="color: #a0aec0; font-size: 12px; margin-top: 32px;">This link expires in 24 hours. If you did not request this, please contact your administrator.</p>
+
+            <p style="color: #4a5568; font-size: 14px; font-weight: 600; margin-bottom: 8px;">Steps to log in:</p>
+            <ol style="color: #4a5568; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
+              <li>Open the <strong>TVET Memo</strong> mobile app.</li>
+              <li>Enter the school code to find your institution.</li>
+              <li>Enter your <strong>admission / staff number</strong>.</li>
+              <li>Enter the temporary password above.</li>
+              <li>You will be prompted to <strong>set a new password</strong> on first login.</li>
+            </ol>
+
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+            <p style="color: #a0aec0; font-size: 12px; margin: 0;">Keep this email safe. Do not share your password with anyone. If you did not expect this email, contact your institution administrator.</p>
           </div>
         `.trim(),
       },
@@ -128,11 +191,11 @@ export class EmailService {
 
     if (result.status !== 'Succeeded') {
       this.logger.error(
-        `Failed to send account setup email to ${to}: ${result.error?.message ?? result.status}`,
+        `Failed to send provisioning email to ${to}: ${result.error?.message ?? result.status}`,
       );
-      throw new Error('Failed to send account setup email');
+      throw new Error('Failed to send provisioning email');
     }
 
-    this.logger.log(`Account setup email sent to ${to}`);
+    this.logger.log(`Provisioning credentials email sent to ${to}`);
   }
 }

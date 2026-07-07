@@ -13,14 +13,14 @@ import { Role } from '../../common/rbac/role.enum';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { accountSetupTokens, users } from '../../database/schema';
-import {
-  generateSetupToken,
-  hashToken,
-  sanitizeUser,
-} from '../../common/utils/crypto.util';
+import { institutions, users } from '../../database/schema';
+import { sanitizeUser } from '../../common/utils/crypto.util';
 import { AuditService } from '../audit/audit.service';
-import { CreateUserDto, UpdateUserDto, UpdateUserRoleDto } from './dto/user.dto';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  UpdateUserRoleDto,
+} from './dto/user.dto';
 import { ProvisionUserDto } from './dto/provision-user.dto';
 import { EmailService } from '../email/email.service';
 
@@ -69,7 +69,9 @@ export class UsersService {
   ): void {
     if (actor.role === Role.SUPER_ADMIN) return;
     if (actor.institutionId !== institutionId) {
-      throw new ForbiddenException('Cannot manage users outside your institution');
+      throw new ForbiddenException(
+        'Cannot manage users outside your institution',
+      );
     }
   }
 
@@ -90,7 +92,7 @@ export class UsersService {
     const wouldRemoveAdmin =
       deactivating ||
       (newRole !== undefined &&
-        target.role === Role.INSTITUTION_ADMIN &&
+        (target.role as Role) === Role.INSTITUTION_ADMIN &&
         newRole !== Role.INSTITUTION_ADMIN);
 
     if (!wouldRemoveAdmin) return;
@@ -256,7 +258,12 @@ export class UsersService {
     id: string,
   ) {
     this.assertActorInstitution(actor, institutionId);
-    await this.assertInstitutionAdminRetained(institutionId, id, undefined, true);
+    await this.assertInstitutionAdminRetained(
+      institutionId,
+      id,
+      undefined,
+      true,
+    );
     await this.findOne(institutionId, id);
 
     const [updated] = await this.db
@@ -299,7 +306,9 @@ export class UsersService {
       throw new ConflictException('Email already registered');
     }
 
-    const tempPassword = Math.random().toString(36).slice(-12);
+    // Generate a human-readable temporary password (word + number).
+    // mustChangePassword = true ensures they are forced to change it on first login.
+    const tempPassword = this.generateTempPassword();
     const passwordHash = await argon2.hash(tempPassword, {
       type: argon2.argon2id,
     });
@@ -313,6 +322,7 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         email,
+        admissionNumber: dto.admissionNumber || null,
         staffNumber: dto.staffNumber || null,
         phoneNumber: dto.phoneNumber || null,
         passwordHash,
@@ -320,27 +330,34 @@ export class UsersService {
       })
       .returning();
 
-    const token = generateSetupToken();
-    const tokenHash = hashToken(token);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // Look up the institution's school code so we can include it in the email.
+    const [institution] = await this.db
+      .select({ schoolCode: institutions.schoolCode, name: institutions.name })
+      .from(institutions)
+      .where(eq(institutions.id, institutionId))
+      .limit(1);
 
-    await this.db.insert(accountSetupTokens).values({
-      institutionId,
-      userId: user.id,
-      tokenHash,
-      expiresAt,
-    });
-
-    const setupLink = `http://localhost:8081/(auth)/password?mode=setup&token=${token}&email=${encodeURIComponent(email)}`;
+    // Send credentials email — school code + login identifier + temp password.
+    // admissionNumber is used for students; staffNumber for staff.
+    // The mobile code-auth flow handles the rest — no setup link needed.
+    const loginIdentifier = user.admissionNumber ?? user.staffNumber ?? '';
+    const loginIdentifierLabel = user.admissionNumber
+      ? 'Admission Number'
+      : 'Staff Number';
 
     try {
-      await this.emailService.sendAccountSetupLink(
-        email,
-        setupLink,
-        user.firstName,
-      );
+      await this.emailService.sendProvisioningCredentials({
+        to: email,
+        firstName: user.firstName,
+        schoolCode: institution?.schoolCode ?? 'N/A',
+        tempPassword,
+        loginIdentifier,
+        loginIdentifierLabel,
+        institutionName: institution?.name,
+      });
     } catch (emailError) {
-      console.error('Email sending failed:', emailError);
+      // Non-fatal: user is already created. Admin can resend / communicate manually.
+      console.error('Provisioning email failed:', emailError);
     }
 
     await this.auditService.log({
@@ -353,5 +370,33 @@ export class UsersService {
     });
 
     return sanitizeUser(user);
+  }
+
+  /** Generate a memorable temporary password: adjective + noun + 4-digit number. */
+  private generateTempPassword(): string {
+    const adjectives = [
+      'Swift',
+      'Bold',
+      'Calm',
+      'Keen',
+      'Wise',
+      'Bright',
+      'Clear',
+      'Sure',
+    ];
+    const nouns = [
+      'River',
+      'Stone',
+      'Cloud',
+      'Field',
+      'Bridge',
+      'Tower',
+      'Forest',
+      'Peak',
+    ];
+    const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const noun = nouns[Math.floor(Math.random() * nouns.length)];
+    const num = Math.floor(1000 + Math.random() * 9000);
+    return `${adj}${noun}${num}`;
   }
 }

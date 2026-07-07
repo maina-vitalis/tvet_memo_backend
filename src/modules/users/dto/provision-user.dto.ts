@@ -44,6 +44,12 @@ export class ProvisionUserDto {
 
   @IsString()
   @IsOptional()
+  @MaxLength(50)
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  admissionNumber?: string;
+
+  @IsString()
+  @IsOptional()
   @MaxLength(20)
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   phoneNumber?: string;
