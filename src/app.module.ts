@@ -16,6 +16,7 @@ import { InstitutionsModule } from './modules/institutions/institutions.module';
 import { MemosModule } from './modules/memos/memos.module';
 import { MailModule } from './modules/mail/mail.module';
 import { UsersModule } from './modules/users/users.module';
+import { BulkUploadModule } from './modules/bulk-upload/bulk-upload.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { RedisModule } from './common/redis/redis.module';
 
@@ -37,6 +38,7 @@ import { RedisModule } from './common/redis/redis.module';
     InstitutionsModule,
     DepartmentsModule,
     UsersModule,
+    BulkUploadModule,
     MemosModule,
     AdminModule,
     RedisModule,

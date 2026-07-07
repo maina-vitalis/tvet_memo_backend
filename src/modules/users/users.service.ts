@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { and, eq, ne } from 'drizzle-orm';
+import { assertActorInstitution } from '../../common/rbac/assert-actor-institution';
 import { canAssignRole } from '../../common/rbac/can-assign-role';
 import { Role } from '../../common/rbac/role.enum';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
@@ -63,18 +64,6 @@ export class UsersService {
     return sanitizeUser(user);
   }
 
-  private assertActorInstitution(
-    actor: AuthenticatedUser,
-    institutionId: string,
-  ): void {
-    if (actor.role === Role.SUPER_ADMIN) return;
-    if (actor.institutionId !== institutionId) {
-      throw new ForbiddenException(
-        'Cannot manage users outside your institution',
-      );
-    }
-  }
-
   private async assertInstitutionAdminRetained(
     institutionId: string,
     targetUserId: string,
@@ -122,7 +111,7 @@ export class UsersService {
     actor: AuthenticatedUser,
     dto: CreateUserDto,
   ) {
-    this.assertActorInstitution(actor, institutionId);
+    assertActorInstitution(actor, institutionId);
 
     if (!canAssignRole(actor, dto.role)) {
       throw new ForbiddenException(`Cannot assign role ${dto.role}`);
@@ -178,7 +167,7 @@ export class UsersService {
     id: string,
     dto: UpdateUserDto,
   ) {
-    this.assertActorInstitution(actor, institutionId);
+    assertActorInstitution(actor, institutionId);
     const before = await this.findOne(institutionId, id);
 
     if (dto.role && !canAssignRole(actor, dto.role)) {
@@ -223,7 +212,7 @@ export class UsersService {
     id: string,
     dto: UpdateUserRoleDto,
   ) {
-    this.assertActorInstitution(actor, institutionId);
+    assertActorInstitution(actor, institutionId);
 
     if (!canAssignRole(actor, dto.role)) {
       throw new ForbiddenException(`Cannot assign role ${dto.role}`);
@@ -257,7 +246,7 @@ export class UsersService {
     actor: AuthenticatedUser,
     id: string,
   ) {
-    this.assertActorInstitution(actor, institutionId);
+    assertActorInstitution(actor, institutionId);
     await this.assertInstitutionAdminRetained(
       institutionId,
       id,
@@ -288,7 +277,7 @@ export class UsersService {
     actor: AuthenticatedUser,
     dto: ProvisionUserDto,
   ) {
-    this.assertActorInstitution(actor, institutionId);
+    assertActorInstitution(actor, institutionId);
 
     if (!canAssignRole(actor, dto.role)) {
       throw new ForbiddenException(`Cannot assign role ${dto.role}`);
