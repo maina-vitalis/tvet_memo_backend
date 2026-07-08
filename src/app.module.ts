@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bull';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClsModule } from 'nestjs-cls';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
@@ -19,6 +20,7 @@ import { UsersModule } from './modules/users/users.module';
 import { BulkUploadModule } from './modules/bulk-upload/bulk-upload.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { RedisModule } from './common/redis/redis.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -31,6 +33,13 @@ import { RedisModule } from './common/redis/redis.module';
       global: true,
       middleware: { mount: true },
     }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        redis: configService.get<string>('redis.url'),
+      }),
+    }),
     DatabaseModule,
     AuditModule,
     AuthModule,
@@ -42,6 +51,7 @@ import { RedisModule } from './common/redis/redis.module';
     MemosModule,
     AdminModule,
     RedisModule,
+    NotificationsModule,
   ],
   controllers: [HealthController],
   providers: [

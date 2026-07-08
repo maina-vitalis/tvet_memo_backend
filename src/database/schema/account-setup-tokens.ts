@@ -2,6 +2,7 @@ import { pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { institutions } from './institutions';
 import { users } from './users';
 
+//tenant admin account set up tokens
 export const accountSetupTokens = pgTable('account_setup_token', {
   id: uuid('id').primaryKey().defaultRandom(),
   institutionId: uuid('institution_id')

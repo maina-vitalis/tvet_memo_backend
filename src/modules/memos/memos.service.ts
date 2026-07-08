@@ -11,6 +11,7 @@ import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { memoRecipients, memos, users } from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { Role } from '../../common/rbac/role.enum';
 import { ROLE_RANK } from '../../common/rbac/role-rank';
 import {
@@ -25,6 +26,7 @@ export class MemosService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async findSent(institutionId: string, senderId: string) {
@@ -200,6 +202,16 @@ export class MemosService {
       },
       ipAddress: req.ip,
       userAgent: req.get('user-agent') ?? undefined,
+    });
+
+    await this.notificationsService.enqueueMemoNotification({
+      memoId: id,
+      institutionId,
+      recipientIds,
+      subject: sent.subject,
+      body: sent.body,
+      priority: sent.priority,
+      category: sent.category,
     });
 
     return { memo: sent, recipientCount: recipientIds.length };

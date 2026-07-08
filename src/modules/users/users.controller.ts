@@ -20,6 +20,10 @@ import {
   UpdateUserRoleDto,
 } from './dto/user.dto';
 import { ProvisionUserDto } from './dto/provision-user.dto';
+import {
+  DeactivatePushTokenDto,
+  RegisterPushTokenDto,
+} from './dto/register-push-token.dto';
 import { ROLE_RANK } from '../../common/rbac/role-rank';
 import { Role } from '../../common/rbac/role.enum';
 import { canAssignRole } from '../../common/rbac/can-assign-role';
@@ -38,6 +42,22 @@ export class UsersController {
       .filter((r) => r !== Role.SUPER_ADMIN && canAssignRole(user, r))
       .map((role) => ({ role, rank: ROLE_RANK[role] }))
       .sort((a, b) => b.rank - a.rank);
+  }
+
+  @Patch('me/push-token')
+  registerPushToken(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: RegisterPushTokenDto,
+  ) {
+    return this.usersService.upsertPushToken(user.id, dto);
+  }
+
+  @Delete('me/push-token')
+  deactivatePushToken(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DeactivatePushTokenDto,
+  ) {
+    return this.usersService.deactivatePushToken(user.id, dto.token);
   }
 
   @Get()

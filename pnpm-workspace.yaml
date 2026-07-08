@@ -4,6 +4,7 @@ packages:
 allowBuilds:
   argon2: true
   esbuild: true
+  msgpackr-extract: true
   unrs-resolver: true
 
 onlyBuiltDependencies:

@@ -101,6 +101,10 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   REDIS_URL?: string;
+
+  @IsString()
+  @IsOptional()
+  EXPO_ACCESS_TOKEN?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

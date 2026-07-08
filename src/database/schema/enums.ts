@@ -33,7 +33,7 @@ export const memoTargetTypeEnum = pgEnum('memo_target_type', [
 export const ackTypeEnum = pgEnum('ack_type_enum', ['simple', 'reply']);
 
 export const notificationChannelEnum = pgEnum('notification_channel', [
-  'fcm',
+  'push',
   'smtp',
 ]);
 

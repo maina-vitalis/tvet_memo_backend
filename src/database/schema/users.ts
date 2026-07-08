@@ -34,7 +34,6 @@ export const users = pgTable(
     phoneNumber: varchar('phone_number', { length: 20 }),
     totpSecret: text('totp_secret'),
     totpEnabled: boolean('totp_enabled').notNull().default(false),
-    fcmToken: text('fcm_token'),
     preferredLang: char('preferred_lang', { length: 2 })
       .notNull()
       .default('en'),

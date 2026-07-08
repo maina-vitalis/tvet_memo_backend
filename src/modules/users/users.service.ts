@@ -14,7 +14,7 @@ import { Role } from '../../common/rbac/role.enum';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { institutions, users } from '../../database/schema';
+import { institutions, userPushTokens, users } from '../../database/schema';
 import { sanitizeUser } from '../../common/utils/crypto.util';
 import { AuditService } from '../audit/audit.service';
 import {
@@ -23,6 +23,7 @@ import {
   UpdateUserRoleDto,
 } from './dto/user.dto';
 import { ProvisionUserDto } from './dto/provision-user.dto';
+import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { EmailService } from '../email/email.service';
 
 @Injectable()
@@ -387,5 +388,46 @@ export class UsersService {
     const noun = nouns[Math.floor(Math.random() * nouns.length)];
     const num = Math.floor(1000 + Math.random() * 9000);
     return `${adj}${noun}${num}`;
+  }
+
+  async upsertPushToken(
+    userId: string,
+    dto: RegisterPushTokenDto,
+  ): Promise<{ registered: true }> {
+    await this.db
+      .insert(userPushTokens)
+      .values({
+        userId,
+        token: dto.token,
+        deviceId: dto.deviceId,
+        deviceName: dto.deviceName,
+        isActive: true,
+        lastUsedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [userPushTokens.userId, userPushTokens.deviceId],
+        set: {
+          token: dto.token,
+          deviceName: dto.deviceName,
+          isActive: true,
+          lastUsedAt: new Date(),
+        },
+      });
+
+    return { registered: true };
+  }
+
+  async deactivatePushToken(
+    userId: string,
+    token: string,
+  ): Promise<{ deactivated: true }> {
+    await this.db
+      .update(userPushTokens)
+      .set({ isActive: false })
+      .where(
+        and(eq(userPushTokens.userId, userId), eq(userPushTokens.token, token)),
+      );
+
+    return { deactivated: true };
   }
 }

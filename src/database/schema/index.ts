@@ -8,6 +8,7 @@ export * from './memos';
 export * from './memo-recipients';
 export * from './attachments';
 export * from './notifications';
+export * from './user-push-token';
 export * from './message-threads';
 export * from './audit-logs';
 export * from './relations';
