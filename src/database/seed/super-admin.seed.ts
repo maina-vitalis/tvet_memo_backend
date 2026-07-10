@@ -1,6 +1,6 @@
 import * as argon2 from 'argon2';
 import { eq } from 'drizzle-orm';
-import { Role } from '../../common/rbac/role.enum';
+import { Role } from '../../common/rbac';
 import { DrizzleDB } from '../drizzle';
 import { users } from '../schema';
 
@@ -37,6 +37,7 @@ export async function seedSuperAdmin(db: DrizzleDB) {
         role: Role.SUPER_ADMIN,
         institutionId: null,
         mustChangePassword: false,
+        emailVerified: true,
         isActive: true,
       })
       .where(eq(users.id, existing.id));
@@ -53,6 +54,7 @@ export async function seedSuperAdmin(db: DrizzleDB) {
     role: Role.SUPER_ADMIN,
     institutionId: null,
     mustChangePassword: false,
+    emailVerified: true,
   });
 
   console.log(`  super_admin: created (${normalizedEmail})`);

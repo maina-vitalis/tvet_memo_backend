@@ -1,6 +1,6 @@
 export interface BulkUploadRowResult {
   row: number;
-  /** The row's Admission Number (student) or Staff Number (staff). */
+  /** The row's admission number. */
   identifier?: string;
   status: 'created' | 'skipped' | 'failed';
   reason?: string;

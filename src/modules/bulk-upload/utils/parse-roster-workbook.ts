@@ -3,17 +3,12 @@ import * as XLSX from 'xlsx';
 
 export interface ParsedRosterRow {
   rowNumber: number;
-  /** Student identifier — presence of this makes the row a TRAINEE. */
-  admissionNumber?: string;
-  /** Staff identifier — presence of this (without admissionNumber) makes the row staff. */
-  staffNumber?: string;
+  admissionNumber: string;
   firstName: string;
   lastName: string;
   email?: string;
   phoneNumber?: string;
   departmentName?: string;
-  /** Raw text from the "Role" column — only meaningful for staff rows. */
-  roleRaw?: string;
 }
 
 export interface RowError {
@@ -34,16 +29,6 @@ const HEADER_ALIASES: Record<string, string[]> = {
     'reg number',
     'regno',
   ],
-  staffNumber: [
-    'staff number',
-    'staff no',
-    'staffno',
-    'employee number',
-    'employee no',
-    'empno',
-    'personnel number',
-    'payroll number',
-  ],
   firstName: ['first name', 'firstname', 'given name'],
   lastName: ['last name', 'lastname', 'surname', 'family name'],
   fullName: ['name', 'full name', 'student name', 'fullname'],
@@ -57,7 +42,6 @@ const HEADER_ALIASES: Record<string, string[]> = {
     'contact number',
   ],
   departmentName: ['department', 'dept', 'course'],
-  roleRaw: ['role', 'staff role', 'position', 'designation', 'job title'],
 };
 
 function normalizeHeader(header: string): string {
@@ -99,13 +83,9 @@ function readField(raw: Record<string, unknown>, key?: string): string {
 }
 
 /**
- * Parses an uploaded roster (.xlsx/.xls) into normalized rows. A row is a
- * student if it has an Admission Number, or staff if it has a Staff Number
- * (staff rows also carry a Role so the caller can validate/assign it).
- *
- * Rows missing a required field are returned as `errors` (row number
- * preserved, counting the header as row 1) instead of throwing — one bad
- * row must not abort the whole file.
+ * Parses an uploaded trainee roster (.xlsx/.xls). Every row must include
+ * an admission number. Email is optional and stored for future credential
+ * delivery but is not used to send anything in the current bulk flow.
  */
 export function parseRosterWorkbook(buffer: Buffer): {
   rows: ParsedRosterRow[];
@@ -130,10 +110,10 @@ export function parseRosterWorkbook(buffer: Buffer): {
 
   const headerMap = buildHeaderMap(rawRows[0]);
 
-  if (!headerMap.admissionNumber && !headerMap.staffNumber) {
+  if (!headerMap.admissionNumber) {
     const foundHeaders = Object.keys(rawRows[0]).join(', ') || '(none)';
     throw new BadRequestException(
-      `Could not find an "Admission Number" or "Staff Number" column in the uploaded file. Columns found: ${foundHeaders}`,
+      `Could not find an "Admission Number" column in the uploaded file. Columns found: ${foundHeaders}`,
     );
   }
 
@@ -141,20 +121,18 @@ export function parseRosterWorkbook(buffer: Buffer): {
   const errors: RowError[] = [];
 
   rawRows.forEach((raw, index) => {
-    const rowNumber = index + 2; // header occupies row 1
+    const rowNumber = index + 2;
     const isBlank = Object.values(raw).every((v) => cellToString(v) === '');
     if (isBlank) return;
 
     const admissionNumber =
       readField(raw, headerMap.admissionNumber) || undefined;
-    const staffNumber = readField(raw, headerMap.staffNumber) || undefined;
     let firstName = readField(raw, headerMap.firstName);
     let lastName = readField(raw, headerMap.lastName);
     const email = readField(raw, headerMap.email) || undefined;
     const phoneNumber = readField(raw, headerMap.phoneNumber) || undefined;
     const departmentName =
       readField(raw, headerMap.departmentName) || undefined;
-    const roleRaw = readField(raw, headerMap.roleRaw) || undefined;
 
     if ((!firstName || !lastName) && headerMap.fullName) {
       const fullName = readField(raw, headerMap.fullName);
@@ -167,12 +145,10 @@ export function parseRosterWorkbook(buffer: Buffer): {
       }
     }
 
-    const identifier = admissionNumber ?? staffNumber;
-
-    if (!identifier) {
+    if (!admissionNumber) {
       errors.push({
         row: rowNumber,
-        reason: 'Missing admission number or staff number',
+        reason: 'Missing admission number',
       });
       return;
     }
@@ -180,7 +156,7 @@ export function parseRosterWorkbook(buffer: Buffer): {
     if (!firstName || !lastName) {
       errors.push({
         row: rowNumber,
-        identifier,
+        identifier: admissionNumber,
         reason: 'Missing first or last name',
       });
       return;
@@ -189,13 +165,11 @@ export function parseRosterWorkbook(buffer: Buffer): {
     rows.push({
       rowNumber,
       admissionNumber,
-      staffNumber,
       firstName,
       lastName,
       email: email?.toLowerCase(),
       phoneNumber,
       departmentName,
-      roleRaw,
     });
   });
 

@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { Role } from '../../common/rbac/role.enum';
+import { Role } from '../../common/rbac';
 import {
   accountSetupTokens,
   institutions,
@@ -115,6 +115,7 @@ export class SuperAdminInstitutionsService {
           email: adminEmail,
           passwordHash,
           mustChangePassword: true,
+          emailVerified: true,
         })
         .returning();
 

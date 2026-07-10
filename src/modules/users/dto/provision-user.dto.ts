@@ -1,8 +1,6 @@
 import { Transform } from 'class-transformer';
-import { Role } from '../../../common/rbac/role.enum';
 import {
   IsEmail,
-  IsEnum,
   IsOptional,
   IsString,
   IsUUID,
@@ -14,23 +12,32 @@ export class ProvisionUserDto {
   @IsString()
   @MinLength(2)
   @MaxLength(100)
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }): string =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   firstName!: string;
 
   @IsString()
   @MinLength(2)
   @MaxLength(100)
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }): string =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   lastName!: string;
 
   @IsEmail()
-  @Transform(({ value }) =>
+  @Transform(({ value }): string =>
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   )
   email!: string;
 
-  @IsEnum(Role)
-  role!: Role;
+  @IsString()
+  @MinLength(1)
+  @MaxLength(50)
+  @Transform(({ value }): string =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  admissionNumber!: string;
 
   @IsUUID()
   @IsOptional()
@@ -38,19 +45,9 @@ export class ProvisionUserDto {
 
   @IsString()
   @IsOptional()
-  @MaxLength(50)
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  staffNumber?: string;
-
-  @IsString()
-  @IsOptional()
-  @MaxLength(50)
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
-  admissionNumber?: string;
-
-  @IsString()
-  @IsOptional()
   @MaxLength(20)
-  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @Transform(({ value }): string =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   phoneNumber?: string;
 }

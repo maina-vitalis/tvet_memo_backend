@@ -78,24 +78,19 @@ export class EmailService {
   }
 
   /**
-   * [PROVISIONING] Send login credentials to a newly provisioned user.
+   * [PROVISIONING] Send login credentials to a newly provisioned trainee.
    *
    * The user logs in via the mobile app using:
-   *   1. School code  — to locate the institution
-   *   2. Admission / staff number — as their identifier
-   *   3. Temporary password — sent here; they must change it on first login
-   *
-   * No setup link is sent — the mobile app's code-auth flow handles the rest.
+   *   1. School code — to locate the institution
+   *   2. Admission number — as their identifier
+   *   3. Temporary password (= admission number) — must change on first login
    */
   async sendProvisioningCredentials(params: {
     to: string;
     firstName: string;
     schoolCode: string;
     tempPassword: string;
-    /** Admission number (students) or staff number — whichever is their login identifier. */
-    loginIdentifier: string;
-    /** Label shown in the email: 'Admission Number' or 'Staff Number'. */
-    loginIdentifierLabel: 'Admission Number' | 'Staff Number';
+    admissionNumber: string;
     institutionName?: string;
   }): Promise<void> {
     const {
@@ -103,15 +98,14 @@ export class EmailService {
       firstName,
       schoolCode,
       tempPassword,
-      loginIdentifier,
-      loginIdentifierLabel,
+      admissionNumber,
       institutionName,
     } = params;
     const displayName = institutionName ?? 'TVET Memo';
 
     if (!this.client || !this.senderAddress) {
       this.logger.log(
-        `[PROVISIONING] Credentials for ${to} — school code: ${schoolCode}, ${loginIdentifierLabel}: ${loginIdentifier}, password: ${tempPassword}`,
+        `[PROVISIONING] Credentials for ${to} — school code: ${schoolCode}, admission number: ${admissionNumber}, password: ${tempPassword}`,
       );
       return;
     }
@@ -128,13 +122,13 @@ export class EmailService {
           'Use the following credentials to log in on the mobile app:',
           '',
           `  School Code:            ${schoolCode}`,
-          `  ${loginIdentifierLabel.padEnd(23)} ${loginIdentifier}`,
+          `  Admission Number:       ${admissionNumber}`,
           `  Temporary Password:     ${tempPassword}`,
           '',
           'Steps to log in:',
           '  1. Open the TVET Memo mobile app.',
           '  2. Enter the school code above to find your institution.',
-          `  3. Enter your ${loginIdentifierLabel.toLowerCase()}: ${loginIdentifier}`,
+          `  3. Enter your admission number: ${admissionNumber}`,
           '  4. Enter the temporary password above.',
           '  5. You will be prompted to set a new password on first login.',
           '',
@@ -157,8 +151,8 @@ export class EmailService {
                   <td style="padding: 8px 0; font-size: 18px; font-weight: bold; letter-spacing: 3px; color: #1a365d;">${schoolCode}</td>
                 </tr>
                 <tr>
-                  <td style="padding: 8px 0; color: #718096; font-size: 14px;">${loginIdentifierLabel}</td>
-                  <td style="padding: 8px 0; font-size: 15px; font-weight: bold; font-family: monospace; color: #2d3748;">${loginIdentifier}</td>
+                  <td style="padding: 8px 0; color: #718096; font-size: 14px;">Admission Number</td>
+                  <td style="padding: 8px 0; font-size: 15px; font-weight: bold; font-family: monospace; color: #2d3748;">${admissionNumber}</td>
                 </tr>
                 <tr>
                   <td style="padding: 8px 0; color: #718096; font-size: 14px;">Temporary Password</td>
@@ -171,7 +165,7 @@ export class EmailService {
             <ol style="color: #4a5568; font-size: 14px; margin: 0; padding-left: 20px; line-height: 1.8;">
               <li>Open the <strong>TVET Memo</strong> mobile app.</li>
               <li>Enter the school code to find your institution.</li>
-              <li>Enter your <strong>admission / staff number</strong>.</li>
+              <li>Enter your <strong>admission number</strong>.</li>
               <li>Enter the temporary password above.</li>
               <li>You will be prompted to <strong>set a new password</strong> on first login.</li>
             </ol>

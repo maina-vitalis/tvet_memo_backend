@@ -21,7 +21,7 @@ export const users = pgTable(
   'users',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    email: varchar('email', { length: 255 }).notNull().unique(),
+    email: varchar('email', { length: 255 }).unique(),
     passwordHash: text('password_hash').notNull(),
     role: roleEnum('role').notNull(),
     institutionId: uuid('institution_id').references(() => institutions.id),
@@ -30,7 +30,7 @@ export const users = pgTable(
     firstName: varchar('first_name', { length: 100 }).notNull(),
     lastName: varchar('last_name', { length: 100 }).notNull(),
     admissionNumber: varchar('admission_number', { length: 50 }),
-    staffNumber: varchar('staff_number', { length: 50 }),
+    emailVerified: boolean('email_verified').notNull().default(false),
     phoneNumber: varchar('phone_number', { length: 20 }),
     totpSecret: text('totp_secret'),
     totpEnabled: boolean('totp_enabled').notNull().default(false),
@@ -56,10 +56,6 @@ export const users = pgTable(
         (${table.role} = 'SUPER_ADMIN' AND ${table.institutionId} IS NULL) OR
         (${table.role} != 'SUPER_ADMIN' AND ${table.institutionId} IS NOT NULL)
       )`,
-    ),
-    unique('users_institution_staff_number_unique').on(
-      table.institutionId,
-      table.staffNumber,
     ),
     unique('users_institution_admission_number_unique').on(
       table.institutionId,

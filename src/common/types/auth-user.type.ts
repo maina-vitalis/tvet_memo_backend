@@ -1,4 +1,4 @@
-import { Role } from '../rbac/role.enum';
+import { Role } from '../rbac';
 
 /** [AUTH] JWT payload — minimal claims; permissions resolved from ROLE_PERMISSIONS at guard time. */
 export interface JwtPayload {
@@ -14,7 +14,7 @@ export interface AuthenticatedUser {
   sessionId: string;
   role: Role;
   institutionId: string | null;
-  email: string;
+  email: string | null;
   firstName: string;
   lastName: string;
   departmentId: string | null;

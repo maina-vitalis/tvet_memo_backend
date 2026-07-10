@@ -230,6 +230,7 @@ export class NotificationsProcessor {
     }
   }
 
+  //compose an expo message
   private buildExpoMessages(
     tokenRows: TokenRow[],
     subject: string,

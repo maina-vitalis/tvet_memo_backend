@@ -9,8 +9,8 @@ import {
 import * as argon2 from 'argon2';
 import { and, eq, ne } from 'drizzle-orm';
 import { assertActorInstitution } from '../../common/rbac/assert-actor-institution';
-import { canAssignRole } from '../../common/rbac/can-assign-role';
-import { Role } from '../../common/rbac/role.enum';
+import { canAssignRole } from '../../common/rbac';
+import { Role } from '../../common/rbac';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
@@ -25,6 +25,10 @@ import {
 import { ProvisionUserDto } from './dto/provision-user.dto';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { EmailService } from '../email/email.service';
+import {
+  buildProvisionedTraineeAccount,
+  hashProvisionedPassword,
+} from './provisioned-account.service';
 
 @Injectable()
 export class UsersService {
@@ -143,10 +147,10 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         email,
-        staffNumber: dto.staffNumber,
         phoneNumber: dto.phoneNumber,
         passwordHash,
         mustChangePassword: false,
+        emailVerified: true,
       })
       .returning();
 
@@ -280,10 +284,6 @@ export class UsersService {
   ) {
     assertActorInstitution(actor, institutionId);
 
-    if (!canAssignRole(actor, dto.role)) {
-      throw new ForbiddenException(`Cannot assign role ${dto.role}`);
-    }
-
     const email = dto.email.toLowerCase();
 
     const [existing] = await this.db
@@ -296,57 +296,53 @@ export class UsersService {
       throw new ConflictException('Email already registered');
     }
 
-    // Generate a human-readable temporary password (word + number).
-    // mustChangePassword = true ensures they are forced to change it on first login.
-    const tempPassword = this.generateTempPassword();
-    const passwordHash = await argon2.hash(tempPassword, {
-      type: argon2.argon2id,
+    const [existingAdmission] = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.institutionId, institutionId),
+          eq(users.admissionNumber, dto.admissionNumber),
+        ),
+      )
+      .limit(1);
+
+    if (existingAdmission) {
+      throw new ConflictException(
+        'Admission number already registered at this institution',
+      );
+    }
+
+    const { values, initialPassword } = buildProvisionedTraineeAccount({
+      institutionId,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      admissionNumber: dto.admissionNumber,
+      email,
+      departmentId: dto.departmentId,
+      phoneNumber: dto.phoneNumber,
     });
 
-    const [user] = await this.db
-      .insert(users)
-      .values({
-        institutionId,
-        role: dto.role,
-        departmentId: dto.departmentId || null,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        email,
-        admissionNumber: dto.admissionNumber || null,
-        staffNumber: dto.staffNumber || null,
-        phoneNumber: dto.phoneNumber || null,
-        passwordHash,
-        mustChangePassword: true,
-      })
-      .returning();
+    values.passwordHash = await hashProvisionedPassword(dto.admissionNumber);
 
-    // Look up the institution's school code so we can include it in the email.
+    const [user] = await this.db.insert(users).values(values).returning();
+
     const [institution] = await this.db
       .select({ schoolCode: institutions.schoolCode, name: institutions.name })
       .from(institutions)
       .where(eq(institutions.id, institutionId))
       .limit(1);
 
-    // Send credentials email — school code + login identifier + temp password.
-    // admissionNumber is used for students; staffNumber for staff.
-    // The mobile code-auth flow handles the rest — no setup link needed.
-    const loginIdentifier = user.admissionNumber ?? user.staffNumber ?? '';
-    const loginIdentifierLabel = user.admissionNumber
-      ? 'Admission Number'
-      : 'Staff Number';
-
     try {
       await this.emailService.sendProvisioningCredentials({
         to: email,
         firstName: user.firstName,
         schoolCode: institution?.schoolCode ?? 'N/A',
-        tempPassword,
-        loginIdentifier,
-        loginIdentifierLabel,
+        tempPassword: initialPassword,
+        admissionNumber: user.admissionNumber!,
         institutionName: institution?.name,
       });
     } catch (emailError) {
-      // Non-fatal: user is already created. Admin can resend / communicate manually.
       console.error('Provisioning email failed:', emailError);
     }
 
@@ -360,34 +356,6 @@ export class UsersService {
     });
 
     return sanitizeUser(user);
-  }
-
-  /** Generate a memorable temporary password: adjective + noun + 4-digit number. */
-  private generateTempPassword(): string {
-    const adjectives = [
-      'Swift',
-      'Bold',
-      'Calm',
-      'Keen',
-      'Wise',
-      'Bright',
-      'Clear',
-      'Sure',
-    ];
-    const nouns = [
-      'River',
-      'Stone',
-      'Cloud',
-      'Field',
-      'Bridge',
-      'Tower',
-      'Forest',
-      'Peak',
-    ];
-    const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-    const noun = nouns[Math.floor(Math.random() * nouns.length)];
-    const num = Math.floor(1000 + Math.random() * 9000);
-    return `${adj}${noun}${num}`;
   }
 
   async upsertPushToken(

@@ -1,4 +1,4 @@
-import { Role } from '../../../common/rbac/role.enum';
+import { Role } from '../../../common/rbac';
 import {
   IsEmail,
   IsEnum,
@@ -30,11 +30,6 @@ export class CreateUserDto {
 
   @IsEmail()
   email!: string;
-
-  @IsString()
-  @IsOptional()
-  @MaxLength(50)
-  staffNumber?: string;
 
   @IsString()
   @IsOptional()

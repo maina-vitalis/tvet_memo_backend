@@ -11,15 +11,16 @@ import {
 import {
   ChangePasswordDto,
   CheckEmailLoginDto,
-  CompleteEmailSetupDto,
-  EmailLoginDto,
   EmailPasswordLoginDto,
-  InitiateEmailLoginDto,
   RefreshTokenDto,
   RegistryLoginDto,
   UnifiedLoginDto,
-  ValidateEmailOtpDto,
 } from './dto/login.dto';
+import {
+  SignupRegisterDto,
+  SignupResendOtpDto,
+  SignupVerifyOtpDto,
+} from './dto/signup.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -32,14 +33,12 @@ export class AuthController {
     return this.authService.login(dto, req);
   }
 
-  //veify the setup token sent to the admin email during institution provisioning
   @Public()
   @Post('setup/verify')
   verifySetupToken(@Body() dto: VerifySetupTokenDto) {
     return this.authService.verifySetupToken(dto);
   }
 
-  //complete the account setup for the admin after verifying the setup token
   @Public()
   @Post('setup/complete')
   completeAccountSetup(
@@ -49,13 +48,6 @@ export class AuthController {
     return this.authService.completeAccountSetup(dto, req);
   }
 
-  // Email flow - Step 1 Institution discovery + email verification code generation
-  @Public()
-  @Post('login/email/initiate')
-  initiateEmailLogin(@Body() dto: InitiateEmailLoginDto) {
-    return this.authService.initiateEmailLogin(dto);
-  }
-
   @Public()
   @Post('login/email/check')
   checkEmailLogin(@Body() dto: CheckEmailLoginDto) {
@@ -63,9 +55,21 @@ export class AuthController {
   }
 
   @Public()
-  @Post('login/email/validate-otp')
-  validateEmailOtp(@Body() dto: ValidateEmailOtpDto) {
-    return this.authService.validateEmailOtp(dto);
+  @Post('signup/register')
+  signupRegister(@Body() dto: SignupRegisterDto) {
+    return this.authService.signupRegister(dto);
+  }
+
+  @Public()
+  @Post('signup/resend-otp')
+  signupResendOtp(@Body() dto: SignupResendOtpDto) {
+    return this.authService.signupResendOtp(dto);
+  }
+
+  @Public()
+  @Post('signup/verify')
+  signupVerifyOtp(@Body() dto: SignupVerifyOtpDto, @Req() req: Request) {
+    return this.authService.signupVerifyOtp(dto, req);
   }
 
   @Public()
@@ -74,20 +78,6 @@ export class AuthController {
     return this.authService.emailPasswordLogin(dto, req);
   }
 
-  @Public()
-  @Post('login/email/complete-setup')
-  completeEmailSetup(@Body() dto: CompleteEmailSetupDto, @Req() req: Request) {
-    return this.authService.completeEmailSetup(dto, req);
-  }
-
-  // Email flow - Step 2 (legacy: verify OTP and sign in directly)
-  @Public()
-  @Post('login/email')
-  emailLogin(@Body() dto: EmailLoginDto, @Req() req: Request) {
-    return this.authService.emailLogin(dto, req);
-  }
-
-  // Shortcode flow: admission number + password (institution already discovered)
   @Public()
   @Post('login/registry')
   registryLogin(@Body() dto: RegistryLoginDto, @Req() req: Request) {
@@ -113,34 +103,16 @@ export class AuthController {
     );
   }
 
-  // ========================================================================
-  // [REFRESH TOKENS + SESSIONS] Device & Session Management
-  // ========================================================================
-
-  /**
-   * [SIGN OUT ALL + ACTIVE SESSIONS]
-   * Returns lightweight list of active sessions for the current authenticated user.
-   * Useful for "Where you're logged in" UI. Marks the current session.
-   */
   @Get('sessions')
   getActiveSessions(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.getActiveSessions(user);
   }
 
-  /**
-   * [SIGN OUT ALL + ACTIVE SESSIONS]
-   * Revokes ALL active sessions for the current user (including this one).
-   * Client should clear local tokens after calling.
-   */
   @Post('logout-all')
   logoutAll(@CurrentUser() user: AuthenticatedUser, @Req() req: Request) {
     return this.authService.logoutAll(user, req);
   }
 
-  /**
-   * Revoke a specific session by its ID (one device).
-   * User can only revoke their own sessions.
-   */
   @Post('sessions/:id/logout')
   logoutSession(
     @CurrentUser() user: AuthenticatedUser,
@@ -150,12 +122,6 @@ export class AuthController {
     return this.authService.logoutSpecificSession(user, sessionId, req);
   }
 
-  /**
-   * Standard logout for current device.
-   * Supports optional refreshToken in body for cases where access is already invalid.
-   * Marked public so clients can logout using refresh token alone (e.g. expired access token,
-   * or cross-auth flows like super-admin tokens).
-   */
   @Public()
   @Post('logout')
   logout(
@@ -166,7 +132,6 @@ export class AuthController {
     return this.authService.logout(user, req, body.refreshToken);
   }
 
-  // [REFRESH TOKENS] kept as-is
   @Public()
   @Post('refresh')
   async refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
