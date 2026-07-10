@@ -7,7 +7,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { DRIZZLE } from '../../../database/database.constants';
 import { DrizzleDB } from '../../../database/drizzle';
 import { users } from '../../../database/schema';
-import { Role } from '../../../common/rbac/role.enum';
+import { Role } from '../../../common/rbac';
 import {
   AuthenticatedUser,
   JwtPayload,
