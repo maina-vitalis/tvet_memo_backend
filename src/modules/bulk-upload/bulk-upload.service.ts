@@ -171,10 +171,19 @@ export class BulkUploadService {
         phoneNumber: row.phoneNumber ?? null,
       });
 
-      values.passwordHash = await hashProvisionedPassword(row.admissionNumber);
-
       insertable.push({ row, identifier, values });
     }
+
+    // Argon2 is intentionally expensive per-hash; hashing rows concurrently
+    // instead of one `await` at a time keeps large rosters from taking
+    // minutes (and outliving the frontend's request timeout).
+    await Promise.all(
+      insertable.map(async (item) => {
+        item.values.passwordHash = await hashProvisionedPassword(
+          item.row.admissionNumber,
+        );
+      }),
+    );
 
     const CHUNK_SIZE = 100;
 
