@@ -1,5 +1,6 @@
 import { Role } from '../../../common/rbac';
 import {
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsNotEmpty,
@@ -64,6 +65,10 @@ export class UpdateUserDto {
   @IsOptional()
   @MaxLength(20)
   phoneNumber?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }
 
 export class UpdateUserRoleDto {

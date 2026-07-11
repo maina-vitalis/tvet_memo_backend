@@ -151,7 +151,7 @@ export class UsersController {
 
   @Delete(':id')
   @RequirePermissions(Permission.MANAGE_TENANT_USERS)
-  deactivate(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
-    return this.usersService.deactivate(user.institutionId!, user, id);
+  remove(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.usersService.remove(user.institutionId!, user, id);
   }
 }

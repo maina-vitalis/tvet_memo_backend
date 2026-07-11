@@ -18,6 +18,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.MANAGE_ROLES,
     Permission.BROADCAST_MEMO,
     Permission.APPROVE_MEMO,
+    Permission.MANAGE_MEMOS,
     Permission.VIEW_AUDIT_LOGS,
     Permission.ACKNOWLEDGE_MEMO,
   ],
@@ -29,12 +30,14 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   [Role.DEPUTY_PRINCIPAL_ADMIN]: [
     Permission.MANAGE_TENANT_USERS,
     Permission.BROADCAST_MEMO,
+    Permission.MANAGE_MEMOS,
     Permission.ACKNOWLEDGE_MEMO,
   ],
   [Role.INSTITUTION_ADMIN]: [
     Permission.MANAGE_TENANT_USERS,
     Permission.PROVISION_USERS_BULK,
     Permission.MANAGE_ROLES,
+    Permission.MANAGE_MEMOS,
     Permission.VIEW_AUDIT_LOGS,
   ],
   [Role.HOD]: [Permission.BROADCAST_MEMO, Permission.ACKNOWLEDGE_MEMO],
