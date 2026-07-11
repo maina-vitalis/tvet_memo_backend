@@ -1,10 +1,11 @@
+import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClsModule } from 'nestjs-cls';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
+import { createBullRedisOptions } from './common/redis/bull-redis.options';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -37,7 +38,9 @@ import { NotificationsModule } from './notifications/notifications.module';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        redis: configService.get<string>('redis.url'),
+        redis: createBullRedisOptions(
+          configService.get<string>('redis.url') ?? 'redis://localhost:6379',
+        ),
       }),
     }),
     DatabaseModule,

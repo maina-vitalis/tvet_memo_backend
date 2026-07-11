@@ -3,9 +3,10 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, eq, gt, ilike, inArray, isNull, or } from 'drizzle-orm';
 import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
@@ -23,6 +24,8 @@ import {
 
 @Injectable()
 export class MemosService {
+  private readonly logger = new Logger(MemosService.name);
+
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
@@ -53,6 +56,7 @@ export class MemosService {
         and(
           eq(memoRecipients.userId, userId),
           eq(memos.institutionId, institutionId),
+          or(isNull(memos.expiresAt), gt(memos.expiresAt, new Date())),
         ),
       );
   }
@@ -98,6 +102,25 @@ export class MemosService {
       .returning();
 
     return memo;
+  }
+
+  /** Create and send in one request — avoids a slow second round-trip on mobile. */
+  async publish(
+    institutionId: string,
+    senderId: string,
+    dto: CreateMemoDto,
+    req: Request,
+  ) {
+    const memo = await this.create(institutionId, senderId, dto);
+
+    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
+    const shouldSendNow = !scheduledAt || scheduledAt.getTime() <= Date.now();
+
+    if (!shouldSendNow) {
+      return { memo, recipientCount: 0, scheduled: true as const };
+    }
+
+    return this.send(institutionId, senderId, memo.id, req);
   }
 
   async update(
@@ -177,18 +200,22 @@ export class MemosService {
       );
     }
 
-    await this.db.insert(memoRecipients).values(
-      recipientIds.map((userId) => ({
-        memoId: id,
-        userId,
-      })),
-    );
+    const sent = await this.db.transaction(async (tx) => {
+      await tx.insert(memoRecipients).values(
+        recipientIds.map((userId) => ({
+          memoId: id,
+          userId,
+        })),
+      );
 
-    const [sent] = await this.db
-      .update(memos)
-      .set({ status: 'sent', sentAt: new Date() })
-      .where(eq(memos.id, id))
-      .returning();
+      const [updated] = await tx
+        .update(memos)
+        .set({ status: 'sent', sentAt: new Date() })
+        .where(eq(memos.id, id))
+        .returning();
+
+      return updated;
+    });
 
     await this.auditService.log({
       institutionId,
@@ -204,15 +231,24 @@ export class MemosService {
       userAgent: req.get('user-agent') ?? undefined,
     });
 
-    await this.notificationsService.enqueueMemoNotification({
-      memoId: id,
-      institutionId,
-      recipientIds,
-      subject: sent.subject,
-      body: sent.body,
-      priority: sent.priority,
-      category: sent.category,
-    });
+    // Do not block the HTTP response on Redis — push is async and a slow/unreachable
+    // Redis must not cause client timeouts or skip enqueue after the memo is already sent.
+    void this.notificationsService
+      .enqueueMemoNotification({
+        memoId: id,
+        institutionId,
+        recipientIds,
+        subject: sent.subject,
+        body: sent.body,
+        priority: sent.priority,
+        category: sent.category,
+      })
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Failed to enqueue push job for memo ${id}. Recipients were saved but no push will fire until Redis is available.`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
 
     return { memo: sent, recipientCount: recipientIds.length };
   }
@@ -408,6 +444,7 @@ export class MemosService {
 
     return rows
       .filter((row) => ROLE_RANK[row.role as Role] <= senderRank)
+      .filter((row) => row.id !== senderId)
       .map((row) => row.id);
   }
 

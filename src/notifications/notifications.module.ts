@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { createBullRedisOptions } from '../common/redis/bull-redis.options';
 import { DatabaseModule } from '../database/database.module';
 import { ExpoProvider } from './expo.provider';
 import { NotificationsProcessor } from './notifications.processor';
@@ -17,7 +18,9 @@ import {
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        redis: configService.get<string>('redis.url'),
+        redis: createBullRedisOptions(
+          configService.get<string>('redis.url') ?? 'redis://localhost:6379',
+        ),
         defaultJobOptions: {
           attempts: 3,
           backoff: { type: 'exponential', delay: 5_000 },

@@ -65,6 +65,18 @@ export class MemosController {
     return this.memosService.create(user.institutionId!, user.id, dto);
   }
 
+  // Publish (create + send) in one round-trip — used by mobile to avoid double-submit timeouts
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.BROADCAST_MEMO)
+  @Post('publish')
+  publish(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateMemoDto,
+    @Req() req: Request,
+  ) {
+    return this.memosService.publish(user.institutionId!, user.id, dto, req);
+  }
+
   @Patch(':id')
   update(
     @CurrentUser() user: AuthenticatedUser,

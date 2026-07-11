@@ -1,7 +1,7 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Job } from 'bull';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { ExpoPushMessage } from 'expo-server-sdk';
 import { DRIZZLE } from '../database/database.constants';
 import { DrizzleDB } from '../database/drizzle';
@@ -115,30 +115,47 @@ export class NotificationsProcessor {
     );
     const now = new Date();
 
-    await this.db.insert(notifications).values(
-      recipientIds.map((userId) => {
-        const hasTokens = (tokensByUser.get(userId) ?? []).length > 0;
-        const wasDelivered = deliveredUserIds.has(userId);
+    const notificationRows = recipientIds.map((userId) => {
+      const hasTokens = (tokensByUser.get(userId) ?? []).length > 0;
+      const wasDelivered = deliveredUserIds.has(userId);
 
-        return {
-          institutionId,
-          userId,
-          memoId,
-          channel: 'push' as const,
-          status: wasDelivered
-            ? ('sent' as const)
-            : hasTokens
-              ? ('failed' as const)
-              : ('failed' as const),
-          errorMessage: wasDelivered
-            ? null
-            : hasTokens
-              ? 'Expo push ticket failed'
-              : 'No active push tokens registered',
-          sentAt: wasDelivered ? now : null,
-        };
-      }),
-    );
+      return {
+        institutionId,
+        userId,
+        memoId,
+        channel: 'push' as const,
+        status: wasDelivered
+          ? ('sent' as const)
+          : hasTokens
+            ? ('failed' as const)
+            : ('failed' as const),
+        errorMessage: wasDelivered
+          ? null
+          : hasTokens
+            ? 'Expo push ticket failed'
+            : 'No active push tokens registered',
+        sentAt: wasDelivered ? now : null,
+      };
+    });
+
+    if (notificationRows.length > 0) {
+      await this.db
+        .insert(notifications)
+        .values(notificationRows)
+        .onConflictDoUpdate({
+          target: [
+            notifications.userId,
+            notifications.memoId,
+            notifications.channel,
+          ],
+          set: {
+            status: sql`excluded.status`,
+            errorMessage: sql`excluded.error_message`,
+            sentAt: sql`excluded.sent_at`,
+            retryCount: sql`${notifications.retryCount} + 1`,
+          },
+        });
+    }
 
     if (deliveredUserIds.size > 0) {
       await this.db

@@ -1,5 +1,5 @@
 import { InjectQueue } from '@nestjs/bull';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Queue } from 'bull';
 import {
   CheckPushReceiptsJob,
@@ -12,18 +12,29 @@ export const CHECK_PUSH_RECEIPTS_JOB = 'check-push-receipts';
 
 @Injectable()
 export class NotificationsService {
+  private readonly logger = new Logger(NotificationsService.name);
+
   constructor(
     @InjectQueue(NOTIFICATIONS_QUEUE)
     private readonly notificationsQueue: Queue,
   ) {}
 
   async enqueueMemoNotification(job: SendMemoPushJob): Promise<void> {
-    await this.notificationsQueue.add(SEND_MEMO_PUSH_JOB, job, {
-      attempts: 3,
-      backoff: { type: 'exponential', delay: 5_000 },
-      removeOnComplete: true,
-      removeOnFail: false,
-    });
+    try {
+      await this.notificationsQueue.add(SEND_MEMO_PUSH_JOB, job, {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: true,
+        removeOnFail: false,
+        timeout: 60_000,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Could not add send-memo-push job for memo ${job.memoId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
   }
 
   async scheduleReceiptCheck(
