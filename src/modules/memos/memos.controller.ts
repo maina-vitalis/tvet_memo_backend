@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -84,6 +85,27 @@ export class MemosController {
     @Body() dto: UpdateMemoDto,
   ) {
     return this.memosService.update(user.institutionId!, user.id, id, dto);
+  }
+
+  // Institution-wide moderation — separate from the sender-only `update` above
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.MANAGE_MEMOS)
+  @Patch(':id/archive')
+  archive(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.memosService.archive(user.institutionId!, user.id, id);
+  }
+
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.MANAGE_MEMOS)
+  @Delete(':id')
+  remove(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.memosService.remove(user.institutionId!, user.id, id);
   }
 
   // Sending requires explicit permission

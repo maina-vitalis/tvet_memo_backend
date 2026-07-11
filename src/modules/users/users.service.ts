@@ -7,14 +7,27 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, inArray, ne, or } from 'drizzle-orm';
 import { assertActorInstitution } from '../../common/rbac/assert-actor-institution';
 import { canAssignRole } from '../../common/rbac';
 import { Role } from '../../common/rbac';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { institutions, userPushTokens, users } from '../../database/schema';
+import {
+  accountSetupTokens,
+  attachments,
+  auditLogs,
+  departments,
+  institutions,
+  memoRecipients,
+  memos,
+  messageThreads,
+  notifications,
+  sessions,
+  userPushTokens,
+  users,
+} from '../../database/schema';
 import { sanitizeUser } from '../../common/utils/crypto.util';
 import { AuditService } from '../audit/audit.service';
 import {
@@ -23,8 +36,10 @@ import {
   UpdateUserRoleDto,
 } from './dto/user.dto';
 import { ProvisionUserDto } from './dto/provision-user.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { EmailService } from '../email/email.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import {
   buildProvisionedTraineeAccount,
   hashProvisionedPassword,
@@ -36,15 +51,14 @@ export class UsersService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
     private readonly emailService: EmailService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async findAll(institutionId: string) {
     const rows = await this.db
       .select()
       .from(users)
-      .where(
-        and(eq(users.institutionId, institutionId), eq(users.isActive, true)),
-      );
+      .where(eq(users.institutionId, institutionId));
 
     return rows.map((user) => sanitizeUser(user));
   }
@@ -53,13 +67,7 @@ export class UsersService {
     const [user] = await this.db
       .select()
       .from(users)
-      .where(
-        and(
-          eq(users.id, id),
-          eq(users.institutionId, institutionId),
-          eq(users.isActive, true),
-        ),
-      )
+      .where(and(eq(users.id, id), eq(users.institutionId, institutionId)))
       .limit(1);
 
     if (!user) {
@@ -183,6 +191,15 @@ export class UsersService {
       await this.assertInstitutionAdminRetained(institutionId, id, dto.role);
     }
 
+    if (dto.isActive === false && before.isActive) {
+      await this.assertInstitutionAdminRetained(
+        institutionId,
+        id,
+        undefined,
+        true,
+      );
+    }
+
     const [updated] = await this.db
       .update(users)
       .set({
@@ -191,6 +208,7 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phoneNumber: dto.phoneNumber,
+        isActive: dto.isActive,
       })
       .where(eq(users.id, id))
       .returning();
@@ -204,6 +222,18 @@ export class UsersService {
         entityId: id,
         beforeState: { role: before.role },
         afterState: { role: dto.role },
+      });
+    }
+
+    if (dto.isActive !== undefined && dto.isActive !== before.isActive) {
+      await this.auditService.log({
+        institutionId,
+        actorId: actor.id,
+        action: dto.isActive ? 'user.activate' : 'user.deactivate',
+        entityType: 'user',
+        entityId: id,
+        beforeState: { isActive: before.isActive },
+        afterState: { isActive: dto.isActive },
       });
     }
 
@@ -246,35 +276,107 @@ export class UsersService {
     return sanitizeUser(updated);
   }
 
-  async deactivate(
-    institutionId: string,
-    actor: AuthenticatedUser,
-    id: string,
-  ) {
+  /** Hard delete — permanently removes the user along with every memo they
+   * sent (and that memo's recipients/notifications/attachments/threads
+   * institution-wide), their own recipient records, sessions, and tokens,
+   * since none of those FKs cascade at the DB level. Department headship and
+   * audit log authorship are detached (set to null) rather than deleted, so
+   * the institution's org chart and audit trail stay intact. */
+  async remove(institutionId: string, actor: AuthenticatedUser, id: string) {
     assertActorInstitution(actor, institutionId);
+
+    if (actor.id === id) {
+      throw new BadRequestException('You cannot delete your own account');
+    }
+
     await this.assertInstitutionAdminRetained(
       institutionId,
       id,
       undefined,
       true,
     );
-    await this.findOne(institutionId, id);
 
-    const [updated] = await this.db
-      .update(users)
-      .set({ isActive: false })
-      .where(eq(users.id, id))
-      .returning();
+    const [target] = await this.db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, id), eq(users.institutionId, institutionId)))
+      .limit(1);
+
+    if (!target) {
+      throw new NotFoundException('User not found');
+    }
+
+    const sentMemoRows = await this.db
+      .select({ id: memos.id })
+      .from(memos)
+      .where(eq(memos.senderId, id));
+    const sentMemoIds = sentMemoRows.map((row) => row.id);
+
+    await this.db.transaction(async (tx) => {
+      if (sentMemoIds.length > 0) {
+        await tx
+          .delete(memoRecipients)
+          .where(inArray(memoRecipients.memoId, sentMemoIds));
+        await tx
+          .delete(notifications)
+          .where(inArray(notifications.memoId, sentMemoIds));
+        await tx
+          .delete(attachments)
+          .where(inArray(attachments.memoId, sentMemoIds));
+        await tx
+          .delete(messageThreads)
+          .where(inArray(messageThreads.memoId, sentMemoIds));
+      }
+
+      await tx.delete(memoRecipients).where(eq(memoRecipients.userId, id));
+      await tx.delete(notifications).where(eq(notifications.userId, id));
+      await tx.delete(attachments).where(eq(attachments.uploadedBy, id));
+      await tx
+        .delete(messageThreads)
+        .where(
+          or(
+            eq(messageThreads.senderId, id),
+            eq(messageThreads.recipientId, id),
+          ),
+        );
+
+      if (sentMemoIds.length > 0) {
+        await tx.delete(memos).where(eq(memos.senderId, id));
+      }
+
+      await tx.delete(sessions).where(eq(sessions.userId, id));
+      await tx
+        .delete(accountSetupTokens)
+        .where(eq(accountSetupTokens.userId, id));
+
+      await tx
+        .update(departments)
+        .set({ headUserId: null })
+        .where(eq(departments.headUserId, id));
+      await tx
+        .update(auditLogs)
+        .set({ actorId: null })
+        .where(eq(auditLogs.actorId, id));
+
+      await tx.delete(users).where(eq(users.id, id));
+    });
 
     await this.auditService.log({
       institutionId,
       actorId: actor.id,
-      action: 'user.deactivate',
+      action: 'user.delete',
       entityType: 'user',
       entityId: id,
+      beforeState: {
+        email: target.email,
+        firstName: target.firstName,
+        lastName: target.lastName,
+        role: target.role,
+        sentMemoCount: sentMemoIds.length,
+      },
     });
 
-    return sanitizeUser(updated);
+    return { id };
   }
 
   async provision(
@@ -356,6 +458,46 @@ export class UsersService {
     });
 
     return sanitizeUser(user);
+  }
+
+  /** [SELF-SERVICE] Combined profile edit — text fields and/or avatar in one write. */
+  async updateMyProfile(
+    userId: string,
+    dto: UpdateMyProfileDto,
+    file?: Express.Multer.File,
+  ) {
+    let avatarUrl: string | undefined;
+
+    if (file) {
+      const result = await this.cloudinaryService.uploadBuffer(file.buffer, {
+        folder: 'memo/avatars',
+        public_id: userId,
+        overwrite: true,
+        invalidate: true,
+        resource_type: 'image',
+        transformation: [
+          { width: 512, height: 512, crop: 'fill', gravity: 'face' },
+        ],
+      });
+      avatarUrl = result.secure_url;
+    }
+
+    const [updated] = await this.db
+      .update(users)
+      .set({
+        ...(dto.firstName !== undefined && { firstName: dto.firstName }),
+        ...(dto.lastName !== undefined && { lastName: dto.lastName }),
+        ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber }),
+        ...(avatarUrl !== undefined && { avatarUrl }),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+
+    return sanitizeUser(updated);
   }
 
   async upsertPushToken(

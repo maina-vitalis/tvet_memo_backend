@@ -10,7 +10,14 @@ import { and, eq, gt, ilike, inArray, isNull, or } from 'drizzle-orm';
 import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
-import { memoRecipients, memos, users } from '../../database/schema';
+import {
+  attachments,
+  memoRecipients,
+  memos,
+  messageThreads,
+  notifications,
+  users,
+} from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { Role } from '../../common/rbac/role.enum';
@@ -73,6 +80,62 @@ export class MemosService {
     }
 
     return memo;
+  }
+
+  async archive(institutionId: string, actorId: string, id: string) {
+    const memo = await this.findOne(institutionId, id);
+
+    if (memo.status === 'archived') {
+      return memo;
+    }
+
+    const [updated] = await this.db
+      .update(memos)
+      .set({ status: 'archived' })
+      .where(eq(memos.id, id))
+      .returning();
+
+    await this.auditService.log({
+      institutionId,
+      actorId,
+      action: 'memo.archive',
+      entityType: 'memo',
+      entityId: id,
+      beforeState: { status: memo.status },
+      afterState: { status: 'archived' },
+    });
+
+    return updated;
+  }
+
+  /** Hard delete — permanently removes the memo along with its recipient
+   * read-receipts, notifications, attachments, and message threads, since
+   * none of those FKs cascade at the DB level. */
+  async remove(institutionId: string, actorId: string, id: string) {
+    const memo = await this.findOne(institutionId, id);
+
+    await this.db.transaction(async (tx) => {
+      await tx.delete(memoRecipients).where(eq(memoRecipients.memoId, id));
+      await tx.delete(notifications).where(eq(notifications.memoId, id));
+      await tx.delete(attachments).where(eq(attachments.memoId, id));
+      await tx.delete(messageThreads).where(eq(messageThreads.memoId, id));
+      await tx.delete(memos).where(eq(memos.id, id));
+    });
+
+    await this.auditService.log({
+      institutionId,
+      actorId,
+      action: 'memo.delete',
+      entityType: 'memo',
+      entityId: id,
+      beforeState: {
+        subject: memo.subject,
+        status: memo.status,
+        senderId: memo.senderId,
+      },
+    });
+
+    return { id };
   }
 
   async create(institutionId: string, senderId: string, dto: CreateMemoDto) {
