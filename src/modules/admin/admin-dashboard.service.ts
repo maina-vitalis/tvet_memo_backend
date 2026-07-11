@@ -10,8 +10,9 @@ import {
   users,
 } from '../../database/schema';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
+import { ListMemosQueryDto } from './dto/list-memos-query.dto';
 
-type DashboardMemoStatus = 'published' | 'draft' | 'scheduled';
+type DashboardMemoStatus = 'published' | 'draft' | 'scheduled' | 'archived';
 
 @Injectable()
 export class AdminDashboardService {
@@ -89,7 +90,7 @@ export class AdminDashboardService {
       .leftJoin(departments, eq(users.departmentId, departments.id))
       .where(eq(memos.institutionId, institutionId))
       .orderBy(desc(memos.sentAt), desc(memos.createdAt))
-      .limit(10);
+      .limit(7);
 
     const memoIds = recentMemoRows.map((memo) => memo.id);
     const readStats = await this.getReadStats(memoIds);
@@ -152,6 +153,131 @@ export class AdminDashboardService {
     };
   }
 
+  async getMemoDetail(user: AuthenticatedUser, memoId: string) {
+    if (!user.institutionId) {
+      throw new NotFoundException('Institution context required');
+    }
+
+    const [row] = await this.db
+      .select({
+        id: memos.id,
+        subject: memos.subject,
+        body: memos.body,
+        priority: memos.priority,
+        category: memos.category,
+        status: memos.status,
+        targetType: memos.targetType,
+        requiresAck: memos.requiresAck,
+        ackDeadlineAt: memos.ackDeadlineAt,
+        expiresAt: memos.expiresAt,
+        sentAt: memos.sentAt,
+        createdAt: memos.createdAt,
+        senderFirstName: users.firstName,
+        senderLastName: users.lastName,
+        departmentName: departments.name,
+      })
+      .from(memos)
+      .leftJoin(users, eq(memos.senderId, users.id))
+      .leftJoin(departments, eq(users.departmentId, departments.id))
+      .where(
+        and(eq(memos.id, memoId), eq(memos.institutionId, user.institutionId)),
+      )
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException('Memo not found');
+    }
+
+    const readStats = await this.getReadStats([row.id]);
+    const stats = readStats.get(row.id) ?? { total: 0, read: 0 };
+    const readRate =
+      stats.total > 0 ? Math.round((stats.read / stats.total) * 100) : 0;
+
+    return {
+      id: row.id,
+      subject: row.subject,
+      body: row.body,
+      priority: row.priority,
+      category: row.category,
+      status: mapMemoStatus(row.status),
+      targetType: row.targetType,
+      department: row.departmentName ?? 'Institution-wide',
+      senderName:
+        [row.senderFirstName, row.senderLastName].filter(Boolean).join(' ') ||
+        'Unknown sender',
+      requiresAck: row.requiresAck,
+      ackDeadlineAt: row.ackDeadlineAt
+        ? formatDashboardDate(row.ackDeadlineAt)
+        : null,
+      sentAt: formatDashboardDate(row.sentAt ?? row.createdAt),
+      expiresAt: row.expiresAt ? formatDashboardDate(row.expiresAt) : null,
+      recipients: {
+        total: stats.total,
+        read: stats.read,
+        readRate,
+      },
+    };
+  }
+
+  async listMemos(user: AuthenticatedUser, query: ListMemosQueryDto) {
+    if (!user.institutionId) {
+      throw new NotFoundException('Institution context required');
+    }
+    const institutionId = user.institutionId;
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 10;
+
+    const [totalResult] = await this.db
+      .select({ count: count() })
+      .from(memos)
+      .where(eq(memos.institutionId, institutionId));
+
+    const rows = await this.db
+      .select({
+        id: memos.id,
+        subject: memos.subject,
+        priority: memos.priority,
+        category: memos.category,
+        status: memos.status,
+        sentAt: memos.sentAt,
+        createdAt: memos.createdAt,
+        departmentName: departments.name,
+      })
+      .from(memos)
+      .leftJoin(users, eq(memos.senderId, users.id))
+      .leftJoin(departments, eq(users.departmentId, departments.id))
+      .where(eq(memos.institutionId, institutionId))
+      .orderBy(desc(memos.sentAt), desc(memos.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+
+    const memoIds = rows.map((row) => row.id);
+    const readStats = await this.getReadStats(memoIds);
+
+    return {
+      items: rows.map((row) => {
+        const stats = readStats.get(row.id) ?? { total: 0, read: 0 };
+        const readRate =
+          stats.total > 0 ? Math.round((stats.read / stats.total) * 100) : 0;
+
+        return {
+          id: row.id,
+          title: row.subject,
+          category: row.category,
+          priority: row.priority,
+          department: row.departmentName ?? 'Institution-wide',
+          sentAt: formatDashboardDate(row.sentAt ?? row.createdAt),
+          status: mapMemoStatus(row.status),
+          recipients: stats.total,
+          readRate,
+        };
+      }),
+      total: totalResult?.count ?? 0,
+      page,
+      pageSize,
+    };
+  }
+
   private async getReadStats(memoIds: string[]) {
     const stats = new Map<string, { total: number; read: number }>();
 
@@ -187,6 +313,10 @@ function mapMemoStatus(status: string): DashboardMemoStatus {
 
   if (status === 'scheduled') {
     return 'scheduled';
+  }
+
+  if (status === 'archived') {
+    return 'archived';
   }
 
   return 'published';
