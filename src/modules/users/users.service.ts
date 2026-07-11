@@ -23,8 +23,10 @@ import {
   UpdateUserRoleDto,
 } from './dto/user.dto';
 import { ProvisionUserDto } from './dto/provision-user.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { EmailService } from '../email/email.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 import {
   buildProvisionedTraineeAccount,
   hashProvisionedPassword,
@@ -36,6 +38,7 @@ export class UsersService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
     private readonly emailService: EmailService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   async findAll(institutionId: string) {
@@ -356,6 +359,46 @@ export class UsersService {
     });
 
     return sanitizeUser(user);
+  }
+
+  /** [SELF-SERVICE] Combined profile edit — text fields and/or avatar in one write. */
+  async updateMyProfile(
+    userId: string,
+    dto: UpdateMyProfileDto,
+    file?: Express.Multer.File,
+  ) {
+    let avatarUrl: string | undefined;
+
+    if (file) {
+      const result = await this.cloudinaryService.uploadBuffer(file.buffer, {
+        folder: 'memo/avatars',
+        public_id: userId,
+        overwrite: true,
+        invalidate: true,
+        resource_type: 'image',
+        transformation: [
+          { width: 512, height: 512, crop: 'fill', gravity: 'face' },
+        ],
+      });
+      avatarUrl = result.secure_url;
+    }
+
+    const [updated] = await this.db
+      .update(users)
+      .set({
+        ...(dto.firstName !== undefined && { firstName: dto.firstName }),
+        ...(dto.lastName !== undefined && { lastName: dto.lastName }),
+        ...(dto.phoneNumber !== undefined && { phoneNumber: dto.phoneNumber }),
+        ...(avatarUrl !== undefined && { avatarUrl }),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!updated) {
+      throw new NotFoundException('User not found');
+    }
+
+    return sanitizeUser(updated);
   }
 
   async upsertPushToken(

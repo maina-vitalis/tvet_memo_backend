@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -6,8 +7,12 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permission.decorator';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -20,6 +25,7 @@ import {
   UpdateUserRoleDto,
 } from './dto/user.dto';
 import { ProvisionUserDto } from './dto/provision-user.dto';
+import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import {
   DeactivatePushTokenDto,
   RegisterPushTokenDto,
@@ -29,10 +35,45 @@ import { Role } from '../../common/rbac/role.enum';
 import { canAssignRole } from '../../common/rbac/can-assign-role';
 import { UsersService } from './users.service';
 
+const ALLOWED_IMAGE_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+
 @Controller('users')
 @UseGuards(PermissionsGuard, TenantScopeGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  /** [SELF-SERVICE] Edit own profile (name/phone/avatar) in a single request. */
+  @Patch('me')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 2 * 1024 * 1024 },
+      fileFilter: (_req, file, callback) => {
+        if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+          callback(
+            new BadRequestException(
+              'Only JPEG, PNG, or WEBP images are allowed',
+            ),
+            false,
+          );
+          return;
+        }
+
+        callback(null, true);
+      },
+    }),
+  )
+  updateMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateMyProfileDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    return this.usersService.updateMyProfile(user.id, dto, file);
+  }
 
   /** [RBAC] Returns roles the actor may assign (fixed enum, filtered by ceiling). */
   @Get('assignable-roles')
