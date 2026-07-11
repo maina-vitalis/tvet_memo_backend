@@ -123,6 +123,7 @@ export class MemosService {
     return this.send(institutionId, senderId, memo.id, req);
   }
 
+  //Edit and update memo
   async update(
     institutionId: string,
     senderId: string,
@@ -172,6 +173,7 @@ export class MemosService {
     return updated;
   }
 
+  //send the push notifications
   async send(
     institutionId: string,
     senderId: string,
@@ -253,6 +255,7 @@ export class MemosService {
     return { memo: sent, recipientCount: recipientIds.length };
   }
 
+  //mark the memo read
   async markRead(institutionId: string, userId: string, memoId: string) {
     await this.findOne(institutionId, memoId);
 
@@ -284,6 +287,7 @@ export class MemosService {
     return updated;
   }
 
+  //aknowledge memo
   async acknowledge(
     institutionId: string,
     userId: string,
@@ -337,6 +341,7 @@ export class MemosService {
     return updated;
   }
 
+  //find the targeted users
   async findTargetableUsers(
     institutionId: string,
     actor: { role: Role },

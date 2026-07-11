@@ -40,7 +40,12 @@ export class DepartmentsController {
     @Param('id') id: string,
     @Body() dto: UpdateDepartmentDto,
   ) {
-    return this.departmentsService.update(user.institutionId!, user.id, id, dto);
+    return this.departmentsService.update(
+      user.institutionId!,
+      user.id,
+      id,
+      dto,
+    );
   }
 
   @Delete(':id')
