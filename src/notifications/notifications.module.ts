@@ -22,7 +22,6 @@ import {
           configService.get<string>('redis.url') ?? 'redis://localhost:6379',
         ),
         defaultJobOptions: {
-          attempts: 3,
           backoff: { type: 'exponential', delay: 5_000 },
           removeOnComplete: true,
         },

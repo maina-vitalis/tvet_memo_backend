@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-} from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { and, eq, inArray } from 'drizzle-orm';
 import { Role } from '../../common/rbac/role.enum';
 import {
@@ -57,7 +53,7 @@ export class MemoTargetingService {
       case MemoScope.COHORT:
         return this.resolveCohort(sender, roleFilter);
       default:
-        throw new ForbiddenException(`Unhandled memo scope: ${input.scope}`);
+        throw new ForbiddenException(`Unhandled memo scope`);
     }
   }
 
@@ -133,7 +129,9 @@ export class MemoTargetingService {
     roleFilter?: Role[],
   ): Promise<string[]> {
     if (!sender.institutionId) {
-      throw new ForbiddenException('Board scope requires an institution context');
+      throw new ForbiddenException(
+        'Board scope requires an institution context',
+      );
     }
 
     const boardRoles = [Role.CHAIRPERSON, Role.BOARD_MEMBER];
@@ -159,7 +157,9 @@ export class MemoTargetingService {
     roleFilter?: Role[],
   ): Promise<string[]> {
     if (!sender.departmentId) {
-      throw new ForbiddenException('Department scope requires a department context');
+      throw new ForbiddenException(
+        'Department scope requires a department context',
+      );
     }
 
     const rows = await this.db
