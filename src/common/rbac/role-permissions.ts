@@ -34,6 +34,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.ACKNOWLEDGE_MEMO,
   ],
   [Role.INSTITUTION_ADMIN]: [
+    Permission.MANAGE_OWN_INSTITUTION,
     Permission.MANAGE_TENANT_USERS,
     Permission.PROVISION_USERS_BULK,
     Permission.MANAGE_ROLES,

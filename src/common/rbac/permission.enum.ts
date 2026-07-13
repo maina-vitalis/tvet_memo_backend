@@ -1,6 +1,7 @@
 /** [RBAC] Fixed permission set — checked via ROLE_PERMISSIONS map, not database. */
 export enum Permission {
   MANAGE_INSTITUTIONS = 'manage_institutions',
+  MANAGE_OWN_INSTITUTION = 'manage_own_institution',
   MANAGE_TENANT_USERS = 'manage_tenant_users',
   PROVISION_USERS_BULK = 'provision_users_bulk',
   MANAGE_ROLES = 'manage_roles',
