@@ -50,6 +50,30 @@ export class NotificationsProcessor {
       return;
     }
 
+    const alreadySent = await this.db
+      .select({ userId: notifications.userId })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.memoId, memoId),
+          eq(notifications.channel, 'push'),
+          eq(notifications.status, 'sent'),
+          inArray(notifications.userId, recipientIds),
+        ),
+      );
+
+    const sentUserIds = new Set(alreadySent.map((row) => row.userId));
+    const pendingRecipientIds = recipientIds.filter(
+      (userId) => !sentUserIds.has(userId),
+    );
+
+    if (pendingRecipientIds.length === 0) {
+      this.logger.log(
+        `Push already delivered for memo ${memoId}; skipping duplicate job run`,
+      );
+      return;
+    }
+
     const tokenRows = await this.db
       .select({
         token: userPushTokens.token,
@@ -58,7 +82,7 @@ export class NotificationsProcessor {
       .from(userPushTokens)
       .where(
         and(
-          inArray(userPushTokens.userId, recipientIds),
+          inArray(userPushTokens.userId, pendingRecipientIds),
           eq(userPushTokens.isActive, true),
         ),
       );
@@ -115,7 +139,7 @@ export class NotificationsProcessor {
     );
     const now = new Date();
 
-    const notificationRows = recipientIds.map((userId) => {
+    const notificationRows = pendingRecipientIds.map((userId) => {
       const hasTokens = (tokensByUser.get(userId) ?? []).length > 0;
       const wasDelivered = deliveredUserIds.has(userId);
 
@@ -169,9 +193,16 @@ export class NotificationsProcessor {
         );
     }
 
-    await this.notificationsService.scheduleReceiptCheck({
-      tickets: ticketRecords,
-    });
+    try {
+      await this.notificationsService.scheduleReceiptCheck({
+        tickets: ticketRecords,
+      });
+    } catch (error) {
+      this.logger.error(
+        `Failed to schedule push receipt check for memo ${memoId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   @Process(CHECK_PUSH_RECEIPTS_JOB)

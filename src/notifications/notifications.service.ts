@@ -22,6 +22,7 @@ export class NotificationsService {
   async enqueueMemoNotification(job: SendMemoPushJob): Promise<void> {
     try {
       await this.notificationsQueue.add(SEND_MEMO_PUSH_JOB, job, {
+        jobId: `send-memo-push-${job.memoId}`,
         attempts: 3,
         backoff: { type: 'exponential', delay: 5_000 },
         removeOnComplete: true,
