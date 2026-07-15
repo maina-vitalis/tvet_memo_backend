@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq, gt, ilike, inArray, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, or } from 'drizzle-orm';
 import { Request } from 'express';
 import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
@@ -65,7 +65,8 @@ export class MemosService {
           eq(memos.institutionId, institutionId),
           or(isNull(memos.expiresAt), gt(memos.expiresAt, new Date())),
         ),
-      );
+      )
+      .orderBy(desc(memos.sentAt), desc(memos.createdAt));
   }
 
   async findOne(institutionId: string, id: string) {
