@@ -12,7 +12,7 @@ import {
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { ListMemosQueryDto } from './dto/list-memos-query.dto';
 
-type DashboardMemoStatus = 'published' | 'draft' | 'scheduled' | 'archived';
+type DashboardMemoStatus = 'published' | 'draft' | 'archived';
 
 @Injectable()
 export class AdminDashboardService {
@@ -167,8 +167,6 @@ export class AdminDashboardService {
         category: memos.category,
         status: memos.status,
         targetType: memos.targetType,
-        requiresAck: memos.requiresAck,
-        ackDeadlineAt: memos.ackDeadlineAt,
         expiresAt: memos.expiresAt,
         sentAt: memos.sentAt,
         createdAt: memos.createdAt,
@@ -205,10 +203,6 @@ export class AdminDashboardService {
       senderName:
         [row.senderFirstName, row.senderLastName].filter(Boolean).join(' ') ||
         'Unknown sender',
-      requiresAck: row.requiresAck,
-      ackDeadlineAt: row.ackDeadlineAt
-        ? formatDashboardDate(row.ackDeadlineAt)
-        : null,
       sentAt: formatDashboardDate(row.sentAt ?? row.createdAt),
       expiresAt: row.expiresAt ? formatDashboardDate(row.expiresAt) : null,
       recipients: {
@@ -307,12 +301,8 @@ export class AdminDashboardService {
 }
 
 function mapMemoStatus(status: string): DashboardMemoStatus {
-  if (status === 'draft') {
+  if (status === 'draft' || status === 'scheduled') {
     return 'draft';
-  }
-
-  if (status === 'scheduled') {
-    return 'scheduled';
   }
 
   if (status === 'archived') {

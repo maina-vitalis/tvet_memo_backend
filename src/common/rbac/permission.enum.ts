@@ -10,5 +10,4 @@ export enum Permission {
   MANAGE_MEMOS = 'manage_memos',
   VIEW_AUDIT_LOGS = 'view_audit_logs',
   VIEW_BOARD_REPORTS = 'view_board_reports',
-  ACKNOWLEDGE_MEMO = 'acknowledge_memo',
 }

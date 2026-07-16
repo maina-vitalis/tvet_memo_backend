@@ -18,7 +18,6 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Permission } from '../../common/rbac/permission.enum';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import {
-  AcknowledgeMemoDto,
   CreateMemoDto,
   UpdateMemoDto,
 } from './dto/memo.dto';
@@ -126,14 +125,5 @@ export class MemosController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.memosService.markRead(user.institutionId!, user.id, id);
-  }
-
-  @Post(':id/acknowledge')
-  acknowledge(
-    @CurrentUser() user: AuthenticatedUser,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: AcknowledgeMemoDto,
-  ) {
-    return this.memosService.acknowledge(user.institutionId!, user.id, id, dto);
   }
 }

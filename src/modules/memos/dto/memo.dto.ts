@@ -1,5 +1,4 @@
 import {
-  IsBoolean,
   IsDateString,
   IsEnum,
   IsNotEmpty,
@@ -55,18 +54,6 @@ export class CreateMemoDto {
   @IsOptional()
   targetPayload?: Record<string, unknown>;
 
-  @IsBoolean()
-  @IsOptional()
-  requiresAck?: boolean;
-
-  @IsDateString()
-  @IsOptional()
-  ackDeadlineAt?: string;
-
-  @IsDateString()
-  @IsOptional()
-  scheduledAt?: string;
-
   @IsDateString()
   @IsOptional()
   expiresAt?: string;
@@ -98,28 +85,7 @@ export class UpdateMemoDto {
   @IsOptional()
   targetPayload?: Record<string, unknown>;
 
-  @IsBoolean()
-  @IsOptional()
-  requiresAck?: boolean;
-
-  @IsDateString()
-  @IsOptional()
-  ackDeadlineAt?: string;
-
-  @IsDateString()
-  @IsOptional()
-  scheduledAt?: string;
-
   @IsDateString()
   @IsOptional()
   expiresAt?: string;
-}
-
-export class AcknowledgeMemoDto {
-  @IsEnum(['simple', 'reply'])
-  ackType!: 'simple' | 'reply';
-
-  @IsString()
-  @IsOptional()
-  ackReply?: string;
 }

@@ -23,7 +23,6 @@ import { NotificationsService } from '../../notifications/notifications.service'
 import { Role } from '../../common/rbac/role.enum';
 import { ROLE_RANK } from '../../common/rbac/role-rank';
 import {
-  AcknowledgeMemoDto,
   CreateMemoDto,
   MemoTargetTypeDto,
   UpdateMemoDto,
@@ -155,12 +154,9 @@ export class MemosService {
         body: dto.body,
         priority: dto.priority ?? 'normal',
         category: dto.category,
-        status: dto.scheduledAt ? 'scheduled' : 'draft',
+        status: 'draft',
         targetType: dto.targetType,
         targetPayload: dto.targetPayload ?? {},
-        requiresAck: dto.requiresAck ?? false,
-        ackDeadlineAt: dto.ackDeadlineAt ? new Date(dto.ackDeadlineAt) : null,
-        scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : null,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
       })
       .returning();
@@ -176,14 +172,6 @@ export class MemosService {
     req: Request,
   ) {
     const memo = await this.create(institutionId, senderId, dto);
-
-    const scheduledAt = dto.scheduledAt ? new Date(dto.scheduledAt) : null;
-    const shouldSendNow = !scheduledAt || scheduledAt.getTime() <= Date.now();
-
-    if (!shouldSendNow) {
-      return { memo, recipientCount: 0, scheduled: true as const };
-    }
-
     return this.send(institutionId, senderId, memo.id, req);
   }
 
@@ -200,10 +188,8 @@ export class MemosService {
       throw new ForbiddenException('Only the sender can edit this memo');
     }
 
-    if (!['draft', 'scheduled'].includes(memo.status)) {
-      throw new BadRequestException(
-        'Only draft or scheduled memos can be edited',
-      );
+    if (memo.status !== 'draft') {
+      throw new BadRequestException('Only draft memos can be edited');
     }
 
     if (dto.targetType || dto.targetPayload) {
@@ -223,13 +209,7 @@ export class MemosService {
         category: dto.category,
         targetType: dto.targetType,
         targetPayload: dto.targetPayload,
-        requiresAck: dto.requiresAck,
-        ackDeadlineAt: dto.ackDeadlineAt
-          ? new Date(dto.ackDeadlineAt)
-          : undefined,
-        scheduledAt: dto.scheduledAt ? new Date(dto.scheduledAt) : undefined,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-        status: dto.scheduledAt ? 'scheduled' : memo.status,
       })
       .where(eq(memos.id, id))
       .returning();
@@ -250,7 +230,7 @@ export class MemosService {
       throw new ForbiddenException('Only the sender can send this memo');
     }
 
-    if (!['draft', 'scheduled'].includes(memo.status)) {
+    if (memo.status !== 'draft') {
       throw new BadRequestException('Memo has already been sent');
     }
 
@@ -286,7 +266,7 @@ export class MemosService {
     await this.auditService.log({
       institutionId,
       actorId: senderId,
-      action: memo.scheduledAt ? 'memo.schedule' : 'memo.send',
+      action: 'memo.send',
       entityType: 'memo',
       entityId: id,
       afterState: {
@@ -345,60 +325,6 @@ export class MemosService {
     const [updated] = await this.db
       .update(memoRecipients)
       .set({ readAt: new Date() })
-      .where(eq(memoRecipients.id, recipient.id))
-      .returning();
-
-    return updated;
-  }
-
-  //aknowledge memo
-  async acknowledge(
-    institutionId: string,
-    userId: string,
-    memoId: string,
-    dto: AcknowledgeMemoDto,
-  ) {
-    const memo = await this.findOne(institutionId, memoId);
-
-    if (!memo.requiresAck) {
-      throw new BadRequestException(
-        'This memo does not require acknowledgement',
-      );
-    }
-
-    const [recipient] = await this.db
-      .select()
-      .from(memoRecipients)
-      .where(
-        and(
-          eq(memoRecipients.memoId, memoId),
-          eq(memoRecipients.userId, userId),
-        ),
-      )
-      .limit(1);
-
-    if (!recipient) {
-      throw new ForbiddenException('You are not a recipient of this memo');
-    }
-
-    if (recipient.acknowledgedAt) {
-      return recipient;
-    }
-
-    if (dto.ackType === 'reply' && !dto.ackReply?.trim()) {
-      throw new BadRequestException(
-        'Reply is required for this acknowledgement type',
-      );
-    }
-
-    const [updated] = await this.db
-      .update(memoRecipients)
-      .set({
-        acknowledgedAt: new Date(),
-        ackType: dto.ackType,
-        ackReply: dto.ackReply,
-        readAt: recipient.readAt ?? new Date(),
-      })
       .where(eq(memoRecipients.id, recipient.id))
       .returning();
 
