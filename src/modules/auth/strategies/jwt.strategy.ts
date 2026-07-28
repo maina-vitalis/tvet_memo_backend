@@ -23,13 +23,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
   ) {
     super({
-      // Mobile sends Authorization: Bearer <token>.
-      // Web admin (via BFF) sends the token in an HttpOnly cookie set server-side.
-      // The extractor chain tries Bearer first so mobile is never affected.
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        ExtractJwt.fromAuthHeaderAsBearerToken(),
-        (req: Request) => req?.cookies?.['memo_access'] ?? null,
-      ]),
+      // Both clients auth via Bearer only:
+      // - Mobile attaches Authorization directly
+      // - Admin BFF reads HttpOnly memo_access and forwards Authorization to Nest
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: configService.getOrThrow<string>('jwt.secret'),
       passReqToCallback: true,
@@ -40,11 +37,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     req: Request,
     payload: JwtPayload,
   ): Promise<AuthenticatedUser> {
-    // Mirror the extractor priority: Bearer first, then HttpOnly cookie.
-    const token =
-      ExtractJwt.fromAuthHeaderAsBearerToken()(req) ??
-      (req.cookies?.['memo_access'] as string | undefined) ??
-      null;
+    const token = ExtractJwt.fromAuthHeaderAsBearerToken()(req);
 
     if (!token || !payload.jti) {
       throw new UnauthorizedException('Invalid token');

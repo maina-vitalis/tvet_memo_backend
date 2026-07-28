@@ -17,10 +17,7 @@ import { RequirePermissions } from '../../common/decorators/require-permission.d
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Permission } from '../../common/rbac/permission.enum';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
-import {
-  CreateMemoDto,
-  UpdateMemoDto,
-} from './dto/memo.dto';
+import { CreateMemoDto, UpdateMemoDto } from './dto/memo.dto';
 import { MemosService } from './memos.service';
 
 @Controller('memos')

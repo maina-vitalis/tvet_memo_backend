@@ -4,7 +4,6 @@ import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import morgan from 'morgan';
-import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -44,13 +43,9 @@ async function bootstrap() {
 
       callback(null, false);
     },
-    credentials: true,
   });
 
   app.setGlobalPrefix('api/v1');
-  // cookie-parser must be registered before morgan (and before the JWT strategy
-  // fires) so Express populates req.cookies for HttpOnly cookie extraction.
-  app.use(cookieParser());
   app.use(morgan('dev'));
 
   app.useGlobalPipes(
