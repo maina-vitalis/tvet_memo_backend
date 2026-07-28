@@ -19,10 +19,17 @@ export class NotificationsService {
     private readonly notificationsQueue: Queue,
   ) {}
 
-  async enqueueMemoNotification(job: SendMemoPushJob): Promise<void> {
+  async enqueueMemoNotification(
+    job: SendMemoPushJob,
+    options?: { isRetry?: boolean },
+  ): Promise<void> {
+    const jobId = options?.isRetry
+      ? `send-memo-push-${job.memoId}-retry-${Date.now()}`
+      : `send-memo-push-${job.memoId}`;
+
     try {
       await this.notificationsQueue.add(SEND_MEMO_PUSH_JOB, job, {
-        jobId: `send-memo-push-${job.memoId}`,
+        jobId,
         attempts: 3,
         backoff: { type: 'exponential', delay: 5_000 },
         removeOnComplete: true,

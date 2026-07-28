@@ -1,6 +1,7 @@
 import {
   IsDateString,
   IsEnum,
+  IsIn,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -30,6 +31,11 @@ export enum MemoTargetTypeDto {
   INDIVIDUAL = 'individual',
 }
 
+export enum MemoBodyFormatDto {
+  PLAIN = 'plain',
+  HTML = 'html',
+}
+
 export class CreateMemoDto {
   @IsString()
   @IsNotEmpty()
@@ -39,6 +45,10 @@ export class CreateMemoDto {
   @IsString()
   @IsNotEmpty()
   body!: string;
+
+  @IsIn(['plain', 'html'])
+  @IsOptional()
+  bodyFormat?: 'plain' | 'html';
 
   @IsEnum(MemoPriorityDto)
   @IsOptional()
@@ -68,6 +78,10 @@ export class UpdateMemoDto {
   @IsString()
   @IsOptional()
   body?: string;
+
+  @IsIn(['plain', 'html'])
+  @IsOptional()
+  bodyFormat?: 'plain' | 'html';
 
   @IsEnum(MemoPriorityDto)
   @IsOptional()

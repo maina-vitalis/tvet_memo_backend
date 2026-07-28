@@ -40,6 +40,7 @@ import { UpdateMyProfileDto } from './dto/update-my-profile.dto';
 import { RegisterPushTokenDto } from './dto/register-push-token.dto';
 import { EmailService } from '../email/email.service';
 import { CloudinaryService } from '../cloudinary/cloudinary.service';
+import { InstitutionQuotaService } from '../institutions/institution-quota.service';
 import {
   buildProvisionedTraineeAccount,
   hashProvisionedPassword,
@@ -52,6 +53,7 @@ export class UsersService {
     private readonly auditService: AuditService,
     private readonly emailService: EmailService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly institutionQuotaService: InstitutionQuotaService,
   ) {}
 
   async findAll(institutionId: string) {
@@ -141,6 +143,8 @@ export class UsersService {
     if (existing) {
       throw new ConflictException('Email already registered');
     }
+
+    await this.institutionQuotaService.assertCanAddUsers(institutionId);
 
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
@@ -414,6 +418,8 @@ export class UsersService {
         'Admission number already registered at this institution',
       );
     }
+
+    await this.institutionQuotaService.assertCanAddUsers(institutionId);
 
     const { values, initialPassword } = buildProvisionedTraineeAccount({
       institutionId,

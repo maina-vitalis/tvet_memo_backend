@@ -7,16 +7,21 @@ import {
   institutions,
   memoRecipients,
   memos,
+  notifications,
   users,
 } from '../../database/schema';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
+import { MemoAttachmentsService } from '../memos/memo-attachments.service';
 import { ListMemosQueryDto } from './dto/list-memos-query.dto';
 
 type DashboardMemoStatus = 'published' | 'draft' | 'archived';
 
 @Injectable()
 export class AdminDashboardService {
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDB) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDB,
+    private readonly memoAttachmentsService: MemoAttachmentsService,
+  ) {}
 
   async getSummary(user: AuthenticatedUser) {
     if (!user.institutionId) {
@@ -163,6 +168,7 @@ export class AdminDashboardService {
         id: memos.id,
         subject: memos.subject,
         body: memos.body,
+        bodyFormat: memos.bodyFormat,
         priority: memos.priority,
         category: memos.category,
         status: memos.status,
@@ -191,10 +197,15 @@ export class AdminDashboardService {
     const readRate =
       stats.total > 0 ? Math.round((stats.read / stats.total) * 100) : 0;
 
+    const attachmentList = await this.memoAttachmentsService.listForMemo(row.id);
+    const delivery = await this.getPushDeliveryStats(row.id, stats.total);
+
     return {
       id: row.id,
       subject: row.subject,
       body: row.body,
+      bodyFormat: row.bodyFormat,
+      attachments: attachmentList,
       priority: row.priority,
       category: row.category,
       status: mapMemoStatus(row.status),
@@ -210,6 +221,7 @@ export class AdminDashboardService {
         read: stats.read,
         readRate,
       },
+      delivery,
     };
   }
 
@@ -297,6 +309,57 @@ export class AdminDashboardService {
     }
 
     return stats;
+  }
+
+  private async getPushDeliveryStats(memoId: string, totalRecipients: number) {
+    const rows = await this.db
+      .select({
+        status: notifications.status,
+        errorMessage: notifications.errorMessage,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(notifications)
+      .leftJoin(users, eq(notifications.userId, users.id))
+      .where(
+        and(
+          eq(notifications.memoId, memoId),
+          eq(notifications.channel, 'push'),
+        ),
+      );
+
+    let sent = 0;
+    let failed = 0;
+    const failures: { name: string; error: string }[] = [];
+
+    for (const row of rows) {
+      if (row.status === 'sent') {
+        sent += 1;
+        continue;
+      }
+
+      if (row.status === 'failed') {
+        failed += 1;
+        failures.push({
+          name:
+            [row.firstName, row.lastName].filter(Boolean).join(' ') ||
+            'Unknown user',
+          error: row.errorMessage ?? 'Delivery failed',
+        });
+      }
+    }
+
+    const notAttempted = Math.max(0, totalRecipients - rows.length);
+
+    return {
+      push: {
+        sent,
+        failed,
+        notAttempted,
+        total: totalRecipients,
+        failures: failures.slice(0, 10),
+      },
+    };
   }
 }
 

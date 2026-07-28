@@ -6,6 +6,7 @@ import { DRIZZLE } from '../../database/database.constants';
 import { DrizzleDB } from '../../database/drizzle';
 import { departments, users } from '../../database/schema';
 import { AuditService } from '../audit/audit.service';
+import { InstitutionQuotaService } from '../institutions/institution-quota.service';
 import {
   buildProvisionedTraineeAccount,
   hashProvisionedPassword,
@@ -23,6 +24,7 @@ export class BulkUploadService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
+    private readonly institutionQuotaService: InstitutionQuotaService,
   ) {}
 
   /**
@@ -174,11 +176,29 @@ export class BulkUploadService {
       insertable.push({ row, identifier, values });
     }
 
+    const { active, quota, remaining } =
+      await this.institutionQuotaService.getUsage(institutionId);
+
+    const quotaLimitedInsertable: Insertable[] = [];
+    for (const item of insertable) {
+      if (quotaLimitedInsertable.length < remaining) {
+        quotaLimitedInsertable.push(item);
+        continue;
+      }
+
+      results.push({
+        row: item.row.rowNumber,
+        identifier: item.identifier,
+        status: 'skipped',
+        reason: `Institution seat quota reached (${active}/${quota})`,
+      });
+    }
+
     // Argon2 is intentionally expensive per-hash; hashing rows concurrently
     // instead of one `await` at a time keeps large rosters from taking
     // minutes (and outliving the frontend's request timeout).
     await Promise.all(
-      insertable.map(async (item) => {
+      quotaLimitedInsertable.map(async (item) => {
         item.values.passwordHash = await hashProvisionedPassword(
           item.row.admissionNumber,
         );
@@ -187,8 +207,8 @@ export class BulkUploadService {
 
     const CHUNK_SIZE = 100;
 
-    for (let i = 0; i < insertable.length; i += CHUNK_SIZE) {
-      const chunk = insertable.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < quotaLimitedInsertable.length; i += CHUNK_SIZE) {
+      const chunk = quotaLimitedInsertable.slice(i, i + CHUNK_SIZE);
       try {
         await this.db.insert(users).values(chunk.map((c) => c.values));
         for (const c of chunk) {

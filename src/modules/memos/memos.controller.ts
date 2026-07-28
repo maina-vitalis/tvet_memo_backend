@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -9,8 +10,13 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { Request } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RequirePermissions } from '../../common/decorators/require-permission.decorator';
@@ -18,11 +24,42 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { Permission } from '../../common/rbac/permission.enum';
 import { AuthenticatedUser } from '../../common/types/auth-user.type';
 import { CreateMemoDto, UpdateMemoDto } from './dto/memo.dto';
+import {
+  MEMO_ATTACHMENT_MAX_BYTES,
+  MEMO_ATTACHMENT_MAX_FILES,
+  MEMO_ATTACHMENT_MIME_TYPES,
+  MemoAttachmentsService,
+} from './memo-attachments.service';
 import { MemosService } from './memos.service';
+
+const memoAttachmentUploadOptions = {
+  storage: memoryStorage(),
+  limits: { fileSize: MEMO_ATTACHMENT_MAX_BYTES },
+  fileFilter: (
+    _req: Request,
+    file: Express.Multer.File,
+    callback: (error: Error | null, acceptFile: boolean) => void,
+  ) => {
+    if (!MEMO_ATTACHMENT_MIME_TYPES.has(file.mimetype)) {
+      callback(
+        new BadRequestException(
+          'Only JPEG, PNG, WEBP images and PDF documents are allowed',
+        ),
+        false,
+      );
+      return;
+    }
+
+    callback(null, true);
+  },
+};
 
 @Controller('memos')
 export class MemosController {
-  constructor(private readonly memosService: MemosService) {}
+  constructor(
+    private readonly memosService: MemosService,
+    private readonly memoAttachmentsService: MemoAttachmentsService,
+  ) {}
 
   @Get('sent')
   findSent(@CurrentUser() user: AuthenticatedUser) {
@@ -53,16 +90,19 @@ export class MemosController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.memosService.findOne(user.institutionId!, id);
+    return this.memosService.findOne(
+      user.institutionId!,
+      user.id,
+      user.role,
+      id,
+    );
   }
 
-  // Creating a memo draft is relatively open
   @Post()
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateMemoDto) {
     return this.memosService.create(user.institutionId!, user.id, dto);
   }
 
-  // Publish (create + send) in one round-trip — used by mobile to avoid double-submit timeouts
   @UseGuards(PermissionsGuard)
   @RequirePermissions(Permission.BROADCAST_MEMO)
   @Post('publish')
@@ -74,6 +114,78 @@ export class MemosController {
     return this.memosService.publish(user.institutionId!, user.id, dto, req);
   }
 
+  /** Multipart publish: memo JSON in `memo` field + optional `files` attachments. */
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.BROADCAST_MEMO)
+  @Post('publish-with-attachments')
+  @UseInterceptors(
+    FilesInterceptor('files', MEMO_ATTACHMENT_MAX_FILES, memoAttachmentUploadOptions),
+  )
+  publishWithAttachments(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body('memo') memoJson: string,
+    @UploadedFiles() files: Express.Multer.File[] | undefined,
+    @Req() req: Request,
+  ) {
+    if (!memoJson) {
+      throw new BadRequestException('memo field is required');
+    }
+
+    let dto: CreateMemoDto;
+    try {
+      dto = JSON.parse(memoJson) as CreateMemoDto;
+    } catch {
+      throw new BadRequestException('memo must be valid JSON');
+    }
+
+    return this.memosService.publishWithAttachments(
+      user.institutionId!,
+      user.id,
+      dto,
+      files,
+      req,
+    );
+  }
+
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.BROADCAST_MEMO)
+  @Post(':id/attachments')
+  @UseInterceptors(
+    FileInterceptor('file', memoAttachmentUploadOptions),
+  )
+  uploadAttachment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('file is required');
+    }
+
+    return this.memoAttachmentsService.upload(
+      user.institutionId!,
+      id,
+      user.id,
+      file,
+    );
+  }
+
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.BROADCAST_MEMO)
+  @Delete(':id/attachments/:attachmentId')
+  removeAttachment(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('attachmentId', ParseUUIDPipe) attachmentId: string,
+  ) {
+    return this.memoAttachmentsService.remove(
+      user.institutionId!,
+      id,
+      attachmentId,
+      user.id,
+    );
+  }
+
   @Patch(':id')
   update(
     @CurrentUser() user: AuthenticatedUser,
@@ -83,7 +195,6 @@ export class MemosController {
     return this.memosService.update(user.institutionId!, user.id, id, dto);
   }
 
-  // Institution-wide moderation — separate from the sender-only `update` above
   @UseGuards(PermissionsGuard)
   @RequirePermissions(Permission.MANAGE_MEMOS)
   @Patch(':id/archive')
@@ -104,7 +215,6 @@ export class MemosController {
     return this.memosService.remove(user.institutionId!, user.id, id);
   }
 
-  // Sending requires explicit permission
   @UseGuards(PermissionsGuard)
   @RequirePermissions(Permission.BROADCAST_MEMO)
   @Post(':id/send')
@@ -122,5 +232,18 @@ export class MemosController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.memosService.markRead(user.institutionId!, user.id, id);
+  }
+
+  @Post(':id/retry-push')
+  retryPush(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.memosService.retryPushNotification(
+      user.institutionId!,
+      user.id,
+      user.role,
+      id,
+    );
   }
 }

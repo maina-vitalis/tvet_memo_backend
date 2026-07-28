@@ -21,12 +21,21 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../../notifications/notifications.service';
 import { Role } from '../../common/rbac/role.enum';
+import { Permission } from '../../common/rbac/permission.enum';
+import { ROLE_PERMISSIONS } from '../../common/rbac/role-permissions';
 import { ROLE_RANK } from '../../common/rbac/role-rank';
 import {
   CreateMemoDto,
   MemoTargetTypeDto,
   UpdateMemoDto,
 } from './dto/memo.dto';
+import {
+  MemoAttachmentsService,
+} from './memo-attachments.service';
+import {
+  memoBodyPreview,
+  normalizeMemoBody,
+} from './utils/memo-body.util';
 
 @Injectable()
 export class MemosService {
@@ -36,6 +45,7 @@ export class MemosService {
     @Inject(DRIZZLE) private readonly db: DrizzleDB,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly memoAttachmentsService: MemoAttachmentsService,
   ) {}
 
   async findSent(institutionId: string, senderId: string) {
@@ -68,7 +78,25 @@ export class MemosService {
       .orderBy(desc(memos.sentAt), desc(memos.createdAt));
   }
 
-  async findOne(institutionId: string, id: string) {
+  async findOne(
+    institutionId: string,
+    userId: string,
+    userRole: Role,
+    id: string,
+  ) {
+    const memo = await this.findMemoRow(institutionId, id);
+    await this.assertMemoReadable(memo, userId, userRole);
+
+    const attachmentList =
+      await this.memoAttachmentsService.listForMemo(memo.id);
+
+    return {
+      ...memo,
+      attachments: attachmentList,
+    };
+  }
+
+  private async findMemoRow(institutionId: string, id: string) {
     const [memo] = await this.db
       .select()
       .from(memos)
@@ -83,7 +111,7 @@ export class MemosService {
   }
 
   async archive(institutionId: string, actorId: string, id: string) {
-    const memo = await this.findOne(institutionId, id);
+    const memo = await this.findMemoRow(institutionId, id);
 
     if (memo.status === 'archived') {
       return memo;
@@ -112,7 +140,7 @@ export class MemosService {
    * read-receipts, notifications, attachments, and message threads, since
    * none of those FKs cascade at the DB level. */
   async remove(institutionId: string, actorId: string, id: string) {
-    const memo = await this.findOne(institutionId, id);
+    const memo = await this.findMemoRow(institutionId, id);
 
     await this.db.transaction(async (tx) => {
       await tx.delete(memoRecipients).where(eq(memoRecipients.memoId, id));
@@ -145,13 +173,16 @@ export class MemosService {
       dto.targetPayload,
     );
 
+    const normalizedBody = normalizeMemoBody(dto.body, dto.bodyFormat);
+
     const [memo] = await this.db
       .insert(memos)
       .values({
         institutionId,
         senderId,
         subject: dto.subject,
-        body: dto.body,
+        body: normalizedBody.body,
+        bodyFormat: normalizedBody.bodyFormat,
         priority: dto.priority ?? 'normal',
         category: dto.category,
         status: 'draft',
@@ -162,6 +193,30 @@ export class MemosService {
       .returning();
 
     return memo;
+  }
+
+  /** Create, attach files (optional), and send in one flow for mobile. */
+  async publishWithAttachments(
+    institutionId: string,
+    senderId: string,
+    dto: CreateMemoDto,
+    files: Express.Multer.File[] | undefined,
+    req: Request,
+  ) {
+    const memo = await this.create(institutionId, senderId, dto);
+
+    if (files?.length) {
+      for (const file of files) {
+        await this.memoAttachmentsService.upload(
+          institutionId,
+          memo.id,
+          senderId,
+          file,
+        );
+      }
+    }
+
+    return this.send(institutionId, senderId, memo.id, req);
   }
 
   /** Create and send in one request — avoids a slow second round-trip on mobile. */
@@ -182,7 +237,7 @@ export class MemosService {
     id: string,
     dto: UpdateMemoDto,
   ) {
-    const memo = await this.findOne(institutionId, id);
+    const memo = await this.findMemoRow(institutionId, id);
 
     if (memo.senderId !== senderId) {
       throw new ForbiddenException('Only the sender can edit this memo');
@@ -200,11 +255,20 @@ export class MemosService {
       );
     }
 
+    const normalizedBody =
+      dto.body !== undefined
+        ? normalizeMemoBody(
+            dto.body,
+            (dto.bodyFormat ?? memo.bodyFormat) as 'plain' | 'html',
+          )
+        : null;
+
     const [updated] = await this.db
       .update(memos)
       .set({
         subject: dto.subject,
-        body: dto.body,
+        body: normalizedBody?.body ?? dto.body,
+        bodyFormat: normalizedBody?.bodyFormat,
         priority: dto.priority,
         category: dto.category,
         targetType: dto.targetType,
@@ -224,7 +288,7 @@ export class MemosService {
     id: string,
     req: Request,
   ) {
-    const memo = await this.findOne(institutionId, id);
+    const memo = await this.findMemoRow(institutionId, id);
 
     if (memo.senderId !== senderId) {
       throw new ForbiddenException('Only the sender can send this memo');
@@ -285,7 +349,7 @@ export class MemosService {
         institutionId,
         recipientIds,
         subject: sent.subject,
-        body: sent.body,
+        body: memoBodyPreview(sent.body, sent.bodyFormat as 'plain' | 'html'),
         priority: sent.priority,
         category: sent.category,
       })
@@ -299,9 +363,63 @@ export class MemosService {
     return { memo: sent, recipientCount: recipientIds.length };
   }
 
+  /** Re-enqueue push for recipients who failed or were never notified. */
+  async retryPushNotification(
+    institutionId: string,
+    actorId: string,
+    actorRole: Role,
+    memoId: string,
+  ) {
+    const memo = await this.findMemoRow(institutionId, memoId);
+
+    if (memo.status !== 'sent') {
+      throw new BadRequestException(
+        'Push retry is only available for sent memos',
+      );
+    }
+
+    const permissions = ROLE_PERMISSIONS[actorRole] ?? [];
+    const canManage = permissions.includes(Permission.MANAGE_MEMOS);
+
+    if (memo.senderId !== actorId && !canManage) {
+      throw new ForbiddenException(
+        'Not allowed to retry push for this memo',
+      );
+    }
+
+    const recipientRows = await this.db
+      .select({ userId: memoRecipients.userId })
+      .from(memoRecipients)
+      .where(eq(memoRecipients.memoId, memoId));
+
+    const recipientIds = recipientRows.map((row) => row.userId);
+
+    if (recipientIds.length === 0) {
+      throw new BadRequestException('No recipients for this memo');
+    }
+
+    await this.notificationsService.enqueueMemoNotification(
+      {
+        memoId,
+        institutionId,
+        recipientIds,
+        subject: memo.subject,
+        body: memoBodyPreview(
+          memo.body,
+          memo.bodyFormat as 'plain' | 'html',
+        ),
+        priority: memo.priority,
+        category: memo.category,
+      },
+      { isRetry: true },
+    );
+
+    return { enqueued: true, recipientCount: recipientIds.length };
+  }
+
   //mark the memo read
   async markRead(institutionId: string, userId: string, memoId: string) {
-    await this.findOne(institutionId, memoId);
+    await this.findMemoRow(institutionId, memoId);
 
     const [recipient] = await this.db
       .select()
@@ -523,6 +641,46 @@ export class MemosService {
 
       default:
         throw new BadRequestException('Invalid target type');
+    }
+  }
+
+  private async assertMemoReadable(
+    memo: typeof memos.$inferSelect,
+    userId: string,
+    userRole: Role,
+  ): Promise<void> {
+    const isSender = memo.senderId === userId;
+    const permissions = ROLE_PERMISSIONS[userRole] ?? [];
+    const canManage = permissions.includes(Permission.MANAGE_MEMOS);
+
+    if (memo.status === 'draft') {
+      if (!isSender) {
+        throw new ForbiddenException('Only the sender can view draft memos');
+      }
+      return;
+    }
+
+    const [recipient] = await this.db
+      .select({ id: memoRecipients.id })
+      .from(memoRecipients)
+      .where(
+        and(
+          eq(memoRecipients.memoId, memo.id),
+          eq(memoRecipients.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    const isRecipient = Boolean(recipient);
+
+    if (!isSender && !isRecipient && !canManage) {
+      throw new ForbiddenException('You do not have access to this memo');
+    }
+
+    if (isRecipient && !isSender && !canManage) {
+      if (memo.expiresAt && memo.expiresAt <= new Date()) {
+        throw new NotFoundException('Memo not found');
+      }
     }
   }
 }

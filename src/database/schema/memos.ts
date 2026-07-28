@@ -26,6 +26,7 @@ export const memos = pgTable('memo', {
     .references(() => users.id),
   subject: varchar('subject', { length: 255 }).notNull(),
   body: text('body').notNull(),
+  bodyFormat: varchar('body_format', { length: 16 }).notNull().default('plain'),
   priority: memoPriorityEnum('priority').notNull().default('normal'),
   category: memoCategoryEnum('category').notNull(),
   status: memoStatusEnum('status').notNull().default('draft'),

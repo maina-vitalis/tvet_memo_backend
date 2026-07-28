@@ -51,6 +51,7 @@ import {
   SignupVerifyOtpDto,
 } from './dto/signup.dto';
 import { InstitutionsService } from '../institutions/institutions.service';
+import { InstitutionQuotaService } from '../institutions/institution-quota.service';
 import { OtpService } from './otp.service';
 import { SessionService } from './session.service';
 
@@ -64,6 +65,7 @@ export class AuthService {
     private readonly sessionService: SessionService,
     private readonly emailService: EmailService,
     private readonly institutionsService: InstitutionsService,
+    private readonly institutionQuotaService: InstitutionQuotaService,
     private readonly otpService: OtpService,
   ) {}
 
@@ -170,6 +172,8 @@ export class AuthService {
         })
         .where(eq(users.id, existing.id));
     } else {
+      await this.institutionQuotaService.assertCanAddUsers(dto.institutionId);
+
       await this.db.insert(users).values({
         institutionId: dto.institutionId,
         role: Role.TRAINEE,

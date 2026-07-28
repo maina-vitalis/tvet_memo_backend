@@ -21,8 +21,6 @@ export class PermissionsGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    console.log('metadata', required);
-
     if (!required || required.length === 0) {
       return true;
     }

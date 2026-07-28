@@ -227,14 +227,12 @@ export class SessionService {
       tokenHash?: string;
     }>(`session:${sessionId}`);
 
-    console.log(redisSession);
-
     if (redisSession) {
-      if (redisSession.isActive !== true) {
-        throw new UnauthorizedException('Session expired or revoked maina');
-      }
-      if (redisSession.tokenHash !== hashToken(token)) {
-        throw new UnauthorizedException('Session expired or revoked gikonyo');
+      if (
+        redisSession.isActive !== true ||
+        redisSession.tokenHash !== hashToken(token)
+      ) {
+        throw new UnauthorizedException('Session expired or revoked');
       }
       return;
     }
@@ -265,6 +263,7 @@ export class SessionService {
       0,
       Math.floor((dbSession.expiresAt.getTime() - Date.now()) / 1000),
     );
+
     if (cacheTtl > 0) {
       await this.redisService.setJson(
         `session:${sessionId}`,

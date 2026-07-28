@@ -43,6 +43,13 @@
       "when": 1783612800000,
       "tag": "20260710120000_auth_provisioning_refactor",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783699200000,
+      "tag": "20260728120000_memo_body_format",
+      "breakpoints": true
     }
   ]
 }
