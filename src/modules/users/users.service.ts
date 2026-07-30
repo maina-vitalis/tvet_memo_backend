@@ -510,25 +510,32 @@ export class UsersService {
     userId: string,
     dto: RegisterPushTokenDto,
   ): Promise<{ registered: true }> {
-    await this.db
-      .insert(userPushTokens)
-      .values({
+    const now = new Date();
+
+    await this.db.transaction(async (tx) => {
+      // Clear rows that would violate token or user+device uniqueness.
+      // Same Expo token can be re-registered after account switch or device id drift.
+      await tx
+        .delete(userPushTokens)
+        .where(
+          or(
+            eq(userPushTokens.token, dto.token),
+            and(
+              eq(userPushTokens.userId, userId),
+              eq(userPushTokens.deviceId, dto.deviceId),
+            ),
+          ),
+        );
+
+      await tx.insert(userPushTokens).values({
         userId,
         token: dto.token,
         deviceId: dto.deviceId,
         deviceName: dto.deviceName,
         isActive: true,
-        lastUsedAt: new Date(),
-      })
-      .onConflictDoUpdate({
-        target: [userPushTokens.userId, userPushTokens.deviceId],
-        set: {
-          token: dto.token,
-          deviceName: dto.deviceName,
-          isActive: true,
-          lastUsedAt: new Date(),
-        },
+        lastUsedAt: now,
       });
+    });
 
     return { registered: true };
   }
