@@ -33,6 +33,7 @@ import {
 import { ROLE_RANK } from '../../common/rbac/role-rank';
 import { Role } from '../../common/rbac/role.enum';
 import { canAssignRole } from '../../common/rbac/can-assign-role';
+import { normalizeUploadMimeType } from '../../common/utils/upload-mime.util';
 import { UsersService } from './users.service';
 
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
@@ -53,7 +54,12 @@ export class UsersController {
       storage: memoryStorage(),
       limits: { fileSize: 2 * 1024 * 1024 },
       fileFilter: (_req, file, callback) => {
-        if (!ALLOWED_IMAGE_MIME_TYPES.has(file.mimetype)) {
+        const normalized = normalizeUploadMimeType(
+          file.mimetype,
+          file.originalname,
+        );
+
+        if (!ALLOWED_IMAGE_MIME_TYPES.has(normalized)) {
           callback(
             new BadRequestException(
               'Only JPEG, PNG, or WEBP images are allowed',
@@ -63,6 +69,7 @@ export class UsersController {
           return;
         }
 
+        file.mimetype = normalized;
         callback(null, true);
       },
     }),

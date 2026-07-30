@@ -31,6 +31,7 @@ import {
   MemoAttachmentsService,
 } from './memo-attachments.service';
 import { MemosService } from './memos.service';
+import { normalizeUploadMimeType } from '../../common/utils/upload-mime.util';
 
 const memoAttachmentUploadOptions = {
   storage: memoryStorage(),
@@ -40,7 +41,12 @@ const memoAttachmentUploadOptions = {
     file: Express.Multer.File,
     callback: (error: Error | null, acceptFile: boolean) => void,
   ) => {
-    if (!MEMO_ATTACHMENT_MIME_TYPES.has(file.mimetype)) {
+    const normalized = normalizeUploadMimeType(
+      file.mimetype,
+      file.originalname,
+    );
+
+    if (!MEMO_ATTACHMENT_MIME_TYPES.has(normalized)) {
       callback(
         new BadRequestException(
           'Only JPEG, PNG, WEBP images and PDF documents are allowed',
@@ -50,6 +56,7 @@ const memoAttachmentUploadOptions = {
       return;
     }
 
+    file.mimetype = normalized;
     callback(null, true);
   },
 };
@@ -119,7 +126,11 @@ export class MemosController {
   @RequirePermissions(Permission.BROADCAST_MEMO)
   @Post('publish-with-attachments')
   @UseInterceptors(
-    FilesInterceptor('files', MEMO_ATTACHMENT_MAX_FILES, memoAttachmentUploadOptions),
+    FilesInterceptor(
+      'files',
+      MEMO_ATTACHMENT_MAX_FILES,
+      memoAttachmentUploadOptions,
+    ),
   )
   publishWithAttachments(
     @CurrentUser() user: AuthenticatedUser,
@@ -150,9 +161,7 @@ export class MemosController {
   @UseGuards(PermissionsGuard)
   @RequirePermissions(Permission.BROADCAST_MEMO)
   @Post(':id/attachments')
-  @UseInterceptors(
-    FileInterceptor('file', memoAttachmentUploadOptions),
-  )
+  @UseInterceptors(FileInterceptor('file', memoAttachmentUploadOptions))
   uploadAttachment(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) id: string,
