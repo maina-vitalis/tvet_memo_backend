@@ -278,24 +278,24 @@ export class NotificationsProcessor {
     }
   }
 
-  //compose an expo message
+  // Compose an Expo message. channelId must match the Android channel the
+  // mobile app creates (`default`); without it FCM V1 uses a silent fallback.
   private buildExpoMessages(
     tokenRows: TokenRow[],
     subject: string,
     body: string,
-    priority: SendMemoPushJob['priority'],
+    _priority: SendMemoPushJob['priority'],
     memoId: string,
   ): ExpoPushMessage[] {
-    const expoPriority =
-      priority === 'urgent' || priority === 'high' ? 'high' : 'default';
-
     return tokenRows.map((row) => ({
       to: row.token,
       title: subject,
       body: body.slice(0, 160),
       data: { memoId },
-      sound: 'default',
-      priority: expoPriority,
+      sound: 'default' as const,
+      // High priority wakes sleeping Android devices so lock-screen banners show.
+      priority: 'high' as const,
+      channelId: 'default',
     }));
   }
 
