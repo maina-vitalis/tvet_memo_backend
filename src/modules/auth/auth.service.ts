@@ -187,6 +187,10 @@ export class AuthService {
       });
     }
 
+    // Store before sending: if the email goes out first, a concurrent send can
+    // win the Redis write and the code the user received would never verify.
+    await this.otpService.issueEmailOtp(dto.institutionId, email, code);
+
     try {
       await this.emailService.sendVerificationCode(
         email,
@@ -194,12 +198,11 @@ export class AuthService {
         institution.name,
       );
     } catch {
+      await this.otpService.releaseSendSlot(dto.institutionId, email);
       throw new BadRequestException('Could not send verification code');
     }
 
-    await this.otpService.issueEmailOtp(dto.institutionId, email, code);
-
-    return { message: 'Verification code sent' };
+    return { message: 'Verification code sent', sentAt: Date.now() };
   }
 
   async signupResendOtp(dto: SignupResendOtpDto) {
@@ -242,6 +245,9 @@ export class AuthService {
 
     const code = generateOtp();
 
+    // Store before sending — see signupRegister.
+    await this.otpService.issueEmailOtp(dto.institutionId, email, code);
+
     try {
       await this.emailService.sendVerificationCode(
         email,
@@ -249,14 +255,13 @@ export class AuthService {
         institution.name,
       );
     } catch {
+      await this.otpService.releaseSendSlot(dto.institutionId, email);
       return {
         message: 'If this email is pending verification, a code has been sent',
       };
     }
 
-    await this.otpService.issueEmailOtp(dto.institutionId, email, code);
-
-    return { message: 'Verification code sent' };
+    return { message: 'Verification code sent', sentAt: Date.now() };
   }
 
   async signupVerifyOtp(dto: SignupVerifyOtpDto, req: Request) {

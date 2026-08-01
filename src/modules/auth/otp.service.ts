@@ -1,35 +1,102 @@
-import {
-  HttpException,
-  HttpStatus,
-  Injectable,
-} from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
 import { RedisService } from '../../common/redis/redis.service';
 import { hashToken } from '../../common/utils/crypto.util';
 
-const OTP_TTL_SECONDS = 10 * 60;
+export const OTP_TTL_SECONDS = 10 * 60;
 const SEND_RATE_WINDOW_SECONDS = 15 * 60;
 const VERIFY_RATE_WINDOW_SECONDS = 15 * 60;
 const MAX_SEND_ATTEMPTS = 3;
 const MAX_VERIFY_ATTEMPTS = 5;
 
+/**
+ * When a new code is issued while an older one is still live (duplicate send,
+ * double-tap on "resend", a retried request), the older code stays acceptable
+ * for this long. Without it the code the user actually read first is silently
+ * killed by the newer send and verification appears to reject a valid OTP.
+ */
+const PREVIOUS_CODE_GRACE_MS = 5 * 60 * 1000;
+
 type StoredEmailOtp = {
   codeHash: string;
+  issuedAt: number;
+  previousCodeHash?: string;
+  previousValidUntil?: number;
 };
 
+/**
+ * Issue is read-modify-write, so it has to be atomic: two concurrent sends must
+ * not both read "no existing code" and clobber each other's record.
+ * KEYS[1] otp key | ARGV[1] new code hash | ARGV[2] now (ms)
+ * ARGV[3] ttl (seconds) | ARGV[4] grace (ms)
+ */
+const ISSUE_OTP_SCRIPT = `
+local now = tonumber(ARGV[2])
+local graceMs = tonumber(ARGV[4])
+local ttlMs = tonumber(ARGV[3]) * 1000
+local payload = { codeHash = ARGV[1], issuedAt = now }
+
+local existing = redis.call('GET', KEYS[1])
+if existing then
+  local ok, prev = pcall(cjson.decode, existing)
+  if ok and prev and prev.codeHash and prev.codeHash ~= ARGV[1] then
+    local graceUntil = now + graceMs
+    -- Never let a superseded code outlive its own original TTL.
+    local prevIssuedAt = tonumber(prev.issuedAt)
+    if prevIssuedAt then
+      local ownExpiry = prevIssuedAt + ttlMs
+      if ownExpiry < graceUntil then
+        graceUntil = ownExpiry
+      end
+    end
+    if graceUntil > now then
+      payload.previousCodeHash = prev.codeHash
+      payload.previousValidUntil = graceUntil
+    end
+  end
+end
+
+redis.call('SET', KEYS[1], cjson.encode(payload), 'EX', ARGV[3])
+return 1
+`;
+
+/**
+ * KEYS[1] otp key | ARGV[1] candidate code hash | ARGV[2] now (ms)
+ * Returns 1 and deletes the record on a match, 0 otherwise.
+ */
 const CONSUME_OTP_SCRIPT = `
 local data = redis.call('GET', KEYS[1])
 if not data then return 0 end
 local ok, payload = pcall(cjson.decode, data)
-if not ok or not payload or payload.codeHash ~= ARGV[1] then return 0 end
-redis.call('DEL', KEYS[1])
-return 1
+if not ok or not payload then return 0 end
+
+if payload.codeHash == ARGV[1] then
+  redis.call('DEL', KEYS[1])
+  return 1
+end
+
+if payload.previousCodeHash == ARGV[1] then
+  local validUntil = tonumber(payload.previousValidUntil)
+  if validUntil and validUntil > tonumber(ARGV[2]) then
+    redis.call('DEL', KEYS[1])
+    return 1
+  end
+end
+
+return 0
 `;
 
 @Injectable()
 export class OtpService {
   constructor(private readonly redisService: RedisService) {}
 
+  /**
+   * Reserves a send slot and stores the code hash.
+   *
+   * Callers MUST store before emailing: if the email goes out first, a
+   * concurrent send can win the Redis write and leave the delivered code
+   * unverifiable. On delivery failure call {@link releaseSendSlot}.
+   */
   async issueEmailOtp(
     institutionId: string,
     email: string,
@@ -38,11 +105,31 @@ export class OtpService {
     const normalizedEmail = email.toLowerCase();
     await this.assertCanSend(institutionId, normalizedEmail);
 
-    await this.redisService.setJson(
-      this.buildOtpKey(institutionId, normalizedEmail),
-      { codeHash: hashToken(code) } satisfies StoredEmailOtp,
-      OTP_TTL_SECONDS,
-    );
+    await this.redisService
+      .getClient()
+      .eval(
+        ISSUE_OTP_SCRIPT,
+        1,
+        this.buildOtpKey(institutionId, normalizedEmail),
+        hashToken(code),
+        Date.now().toString(),
+        OTP_TTL_SECONDS.toString(),
+        PREVIOUS_CODE_GRACE_MS.toString(),
+      );
+  }
+
+  /**
+   * Gives back the send slot consumed by {@link issueEmailOtp} when the code
+   * never actually reached the user, so a failed delivery cannot rate-limit
+   * them out of their own signup.
+   */
+  async releaseSendSlot(institutionId: string, email: string): Promise<void> {
+    const key = `otp:rate:send:${institutionId}:${email.toLowerCase()}`;
+    const remaining = await this.redisService.incrBy(key, -1);
+
+    if (remaining <= 0) {
+      await this.redisService.del(key);
+    }
   }
 
   async checkEmailOtp(
@@ -57,7 +144,7 @@ export class OtpService {
       this.buildOtpKey(institutionId, normalizedEmail),
     );
 
-    if (!stored || !this.matchesCode(stored.codeHash, code)) {
+    if (!stored || !this.matchesStoredCode(stored, code)) {
       await this.recordFailedVerify(institutionId, normalizedEmail);
       return false;
     }
@@ -76,12 +163,17 @@ export class OtpService {
     const key = this.buildOtpKey(institutionId, normalizedEmail);
     const consumed = await this.redisService
       .getClient()
-      .eval(CONSUME_OTP_SCRIPT, 1, key, hashToken(code));
+      .eval(CONSUME_OTP_SCRIPT, 1, key, hashToken(code), Date.now().toString());
 
     if (consumed !== 1) {
       await this.recordFailedVerify(institutionId, normalizedEmail);
       return false;
     }
+
+    // A successful verification clears the failed-attempt budget.
+    await this.redisService.del(
+      `otp:rate:verify:${institutionId}:${normalizedEmail}`,
+    );
 
     return true;
   }
@@ -98,8 +190,18 @@ export class OtpService {
     return `otp:email:${institutionId}:${email}`;
   }
 
-  private matchesCode(storedHash: string, code: string): boolean {
-    return secureCompareHashes(storedHash, hashToken(code));
+  private matchesStoredCode(stored: StoredEmailOtp, code: string): boolean {
+    const candidate = hashToken(code);
+
+    if (secureCompareHashes(stored.codeHash, candidate)) {
+      return true;
+    }
+
+    return (
+      Boolean(stored.previousCodeHash) &&
+      (stored.previousValidUntil ?? 0) > Date.now() &&
+      secureCompareHashes(stored.previousCodeHash as string, candidate)
+    );
   }
 
   private async assertCanSend(
