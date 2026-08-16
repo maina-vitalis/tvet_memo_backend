@@ -216,6 +216,13 @@ export class MemosController {
 
   @UseGuards(PermissionsGuard)
   @RequirePermissions(Permission.MANAGE_MEMOS)
+  @Delete()
+  removeAll(@CurrentUser() user: AuthenticatedUser) {
+    return this.memosService.removeAll(user.institutionId!, user.id);
+  }
+
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions(Permission.MANAGE_MEMOS)
   @Delete(':id')
   remove(
     @CurrentUser() user: AuthenticatedUser,

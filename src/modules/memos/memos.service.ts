@@ -166,6 +166,52 @@ export class MemosService {
     return { id };
   }
 
+  /** Hard delete ALL memos for the institution — permanently removes every
+   * memo along with all related recipient read-receipts, notifications,
+   * attachments, and message threads. */
+  async removeAll(institutionId: string, actorId: string) {
+    const institutionMemos = await this.db
+      .select({ id: memos.id })
+      .from(memos)
+      .where(eq(memos.institutionId, institutionId));
+
+    const memoIds = institutionMemos.map((m) => m.id);
+
+    if (memoIds.length === 0) {
+      return { deleted: 0 };
+    }
+
+    await this.db.transaction(async (tx) => {
+      await tx
+        .delete(memoRecipients)
+        .where(inArray(memoRecipients.memoId, memoIds));
+      await tx
+        .delete(notifications)
+        .where(inArray(notifications.memoId, memoIds));
+      await tx
+        .delete(attachments)
+        .where(inArray(attachments.memoId, memoIds));
+      await tx
+        .delete(messageThreads)
+        .where(inArray(messageThreads.memoId, memoIds));
+      await tx
+        .delete(memos)
+        .where(eq(memos.institutionId, institutionId));
+    });
+
+    await this.auditService.log({
+      institutionId,
+      actorId,
+      action: 'memo.delete_all',
+      entityType: 'memo',
+      entityId: institutionId,
+      afterState: { deletedCount: memoIds.length },
+    });
+
+    return { deleted: memoIds.length };
+  }
+
+
   async create(institutionId: string, senderId: string, dto: CreateMemoDto) {
     await this.assertTargetPayloadAllowed(
       senderId,
