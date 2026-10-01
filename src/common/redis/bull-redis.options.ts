@@ -13,5 +13,8 @@ export function createBullRedisOptions(redisUrl: string): RedisOptions {
     connectTimeout: 10_000,
     maxRetriesPerRequest: null,
     ...(isTls ? { tls: {} } : {}),
+    tls: {
+      rejectUnauthorized: false,
+    },
   };
 }
